@@ -1,321 +1,633 @@
-import React, { useState } from "react";
+// app/admin/QuizFormScreen.js
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
   ScrollView,
   Alert,
-  FlatList,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons"; // ✅ Pour la flèche
-import { collection, addDoc } from "firebase/firestore";
-import { db } from "../services/firebase";
+import { Ionicons } from "@expo/vector-icons";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "../services/firebase"; // garde ton chemin actuel si ça marche
+
+const PRIMARY = "#6C63FF";
+const SUCCESS = "#28A745";
+const DANGER = "#EF4444";
+const SURFACE = "#FFFFFF";
+const CARD = "#F5F7FB";
+const BORDER = "#E6E8EF";
+const TEXT_MUTED = "#6B7280";
 
 export default function QuizFormScreen() {
-  const navigation = useNavigation();
-
-  // === Quiz global ===
   const [title, setTitle] = useState("");
-  const [theme, setTheme] = useState("");
-  const [subthemes, setSubthemes] = useState([""]);
+  const [subthemes, setSubthemes] = useState([{ name: "", open: true, questions: [] }]);
 
-  // === Question en cours ===
-  const [question, setQuestion] = useState("");
-  const [options, setOptions] = useState(["", "", "", ""]);
-  const [answer, setAnswer] = useState("");
+  // --- Helpers
+  const totalQuestions = useMemo(
+    () => subthemes.reduce((acc, s) => acc + (s?.questions?.length || 0), 0),
+    [subthemes]
+  );
 
-  // === Liste finale des questions ===
-  const [questions, setQuestions] = useState([]);
-
-  // 🧩 Ajouter une question
-  const handleAddQuestion = () => {
-    if (!question || !answer) {
-      Alert.alert("Erreur", "Merci de remplir la question et la réponse correcte.");
-      return;
-    }
-
-    setQuestions([...questions, { question, options, answer }]);
-    setQuestion("");
-    setOptions(["", "", "", ""]);
-    setAnswer("");
+  const setSub = (idx, patch) => {
+    setSubthemes((prev) => {
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], ...patch };
+      return copy;
+    });
   };
 
-  // 💾 Sauvegarder le quiz complet
-  const handleSaveQuiz = async () => {
-    if (!title || !theme || questions.length === 0) {
-      Alert.alert("Erreur", "Merci de compléter le titre, le thème et au moins une question.");
-      return;
+  const addSubtheme = () => {
+    setSubthemes((prev) => [...prev, { name: "", open: true, questions: [] }]);
+  };
+
+  const removeSubtheme = (index) => {
+    setSubthemes((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const toggleOpen = (index) => {
+    setSub(index, { open: !subthemes[index].open });
+  };
+
+  const addQuestion = (subIndex) => {
+    setSubthemes((prev) => {
+      const copy = [...prev];
+      copy[subIndex].questions.push({
+        question: "",
+        type: "true_false", // default
+        options: [],        // for QCM
+        answer: "",         // store string: "true"/"false" or the correct option, or free text
+      });
+      return copy;
+    });
+  };
+
+  const updateQuestion = (subIndex, qIndex, key, value) => {
+    setSubthemes((prev) => {
+      const copy = [...prev];
+      copy[subIndex].questions[qIndex][key] = value;
+      return copy;
+    });
+  };
+
+  const removeQuestion = (subIndex, qIndex) => {
+    setSubthemes((prev) => {
+      const copy = [...prev];
+      copy[subIndex].questions = copy[subIndex].questions.filter((_, i) => i !== qIndex);
+      return copy;
+    });
+  };
+
+  const duplicateQuestion = (subIndex, qIndex) => {
+    setSubthemes((prev) => {
+      const copy = [...prev];
+      const q = copy[subIndex].questions[qIndex];
+      copy[subIndex].questions.splice(qIndex + 1, 0, { ...q });
+      return copy;
+    });
+  };
+
+  const addOption = (subIndex, qIndex) => {
+    setSubthemes((prev) => {
+      const copy = [...prev];
+      copy[subIndex].questions[qIndex].options = [
+        ...(copy[subIndex].questions[qIndex].options || []),
+        "",
+      ];
+      return copy;
+    });
+  };
+
+  const updateOption = (subIndex, qIndex, optIndex, text) => {
+    setSubthemes((prev) => {
+      const copy = [...prev];
+      copy[subIndex].questions[qIndex].options[optIndex] = text;
+      return copy;
+    });
+  };
+
+  const removeOption = (subIndex, qIndex, optIndex) => {
+    setSubthemes((prev) => {
+      const copy = [...prev];
+      const q = copy[subIndex].questions[qIndex];
+      q.options = q.options.filter((_, i) => i !== optIndex);
+      // si on supprime l'option correcte, on clear la réponse
+      if (!q.options.includes(q.answer)) q.answer = "";
+      return copy;
+    });
+  };
+
+  const selectCorrectOption = (subIndex, qIndex, optValue) => {
+    updateQuestion(subIndex, qIndex, "answer", optValue);
+  };
+
+  // --- Validation UX
+  const validate = () => {
+    if (!title.trim()) return "Donne un nom au quiz 😉";
+    const visibleSubs = subthemes.filter((s) => s.name.trim() || s.questions.length > 0);
+    if (visibleSubs.length === 0) return "Ajoute au moins un sous-thème avec une question.";
+    for (let i = 0; i < visibleSubs.length; i++) {
+      const s = visibleSubs[i];
+      if (!s.name.trim()) return `Le sous-thème ${i + 1} n’a pas de nom.`;
+      if (s.questions.length === 0) return `Le sous-thème “${s.name}” n’a pas de question.`;
+      for (let j = 0; j < s.questions.length; j++) {
+        const q = s.questions[j];
+        if (!q.question.trim()) return `Question ${j + 1} de “${s.name}” : texte manquant.`;
+        if (q.type === "multiple_choice") {
+          const opts = (q.options || []).filter((o) => o.trim());
+          if (opts.length < 2) return `QCM ( ${s.name} / Q${j + 1} ) : mets au moins 2 options.`;
+          if (!opts.includes(q.answer))
+            return `QCM ( ${s.name} / Q${j + 1} ) : sélectionne la bonne réponse.`;
+        }
+        if (q.type === "true_false" && !["true", "false"].includes(q.answer))
+          return `Vrai/Faux ( ${s.name} / Q${j + 1} ) : choisis Vrai ou Faux.`;
+        // open: answer optionnelle → pas de blocage
+      }
     }
+    return null;
+  };
+
+  const saveQuiz = async () => {
+    const err = validate();
+    if (err) return Alert.alert("Petit rappel", err);
+
+    // Nettoyage (on ne sauve pas la clé "open")
+    const cleaned = subthemes
+      .filter((s) => s.name.trim() || s.questions.length > 0)
+      .map(({ name, questions }) => ({
+        name: name.trim(),
+        questions: questions.map((q) => ({
+          question: q.question.trim(),
+          type: q.type,
+          options: (q.options || []).filter((o) => o.trim()),
+          answer: q.answer, // "true"/"false" / option string / texte libre
+        })),
+      }));
 
     try {
       await addDoc(collection(db, "quizzes"), {
-        title,
-        theme,
-        subthemes: subthemes.filter((s) => s.trim() !== ""),
-        questions,
-        createdAt: new Date(),
+        creatorId: auth.currentUser?.uid || null,
+        title: title.trim(),
+        subthemes: cleaned,
+        createdAt: serverTimestamp(),
       });
-      Alert.alert("✅ Quiz enregistré avec succès !");
-      navigation.goBack();
+      Alert.alert("✅ Quiz enregistré !");
+      setTitle("");
+      setSubthemes([{ name: "", open: true, questions: [] }]);
     } catch (error) {
-      Alert.alert("Erreur", error.message);
+      Alert.alert("Erreur", error?.message || "Impossible d’enregistrer.");
     }
   };
 
   return (
-    <View style={styles.container}>
-      {/* === Header clair avec flèche de retour === */}
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#1e293b" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Création d’un Quiz</Text>
-        <View style={{ width: 24 }} /> {/* espace vide pour équilibrer */}
+        <Text style={styles.headerTitle}>Créer un quiz</Text>
+        <View style={styles.counters}>
+          <Badge icon="albums-outline" value={`${subthemes.length} sous-thèmes`} />
+          <Badge icon="help-circle-outline" value={`${totalQuestions} questions`} />
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ alignItems: "center", paddingBottom: 40 }}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Thème global */}
         <View style={styles.card}>
-          <Text style={styles.icon}>🧩</Text>
-          <Text style={styles.title}>Configurer votre Quiz</Text>
-
-          {/* === Infos globales du quiz === */}
+          <Text style={styles.label}>Thème global</Text>
           <TextInput
             style={styles.input}
-            placeholder="Titre du quiz"
+            placeholder="Ex : Physique Médicale"
             value={title}
             onChangeText={setTitle}
-            placeholderTextColor="#666"
           />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Thème principal"
-            value={theme}
-            onChangeText={setTheme}
-            placeholderTextColor="#666"
-          />
-
-          <Text style={styles.subtitle}>Sous-thèmes :</Text>
-          {subthemes.map((st, i) => (
-            <TextInput
-              key={i}
-              style={styles.input}
-              placeholder={`Sous-thème ${i + 1}`}
-              value={st}
-              onChangeText={(txt) => {
-                const updated = [...subthemes];
-                updated[i] = txt;
-                setSubthemes(updated);
-              }}
-              placeholderTextColor="#666"
-            />
-          ))}
-
-          <TouchableOpacity
-            onPress={() => setSubthemes([...subthemes, ""])}
-            style={styles.smallButton}
-          >
-            <Text style={styles.smallButtonText}>➕ Ajouter un sous-thème</Text>
-          </TouchableOpacity>
-
-          {/* === Ajout de question === */}
-          <Text style={styles.sectionTitle}>Nouvelle question</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Énoncé de la question"
-            value={question}
-            onChangeText={setQuestion}
-            placeholderTextColor="#666"
-          />
-
-          <Text style={styles.subtitle}>Options :</Text>
-          {options.map((opt, i) => (
-            <TextInput
-              key={i}
-              style={styles.input}
-              placeholder={`Option ${i + 1}`}
-              value={opt}
-              onChangeText={(txt) => {
-                const updated = [...options];
-                updated[i] = txt;
-                setOptions(updated);
-              }}
-              placeholderTextColor="#666"
-            />
-          ))}
-
-          <TextInput
-            style={styles.input}
-            placeholder="Réponse correcte"
-            value={answer}
-            onChangeText={setAnswer}
-            placeholderTextColor="#666"
-          />
-
-          <TouchableOpacity style={styles.addQuestionBtn} onPress={handleAddQuestion}>
-            <Text style={styles.addQuestionText}>➕ Ajouter la question</Text>
-          </TouchableOpacity>
-
-          {/* === Liste des questions ajoutées === */}
-          {questions.length > 0 && (
-            <View style={styles.questionsList}>
-              <Text style={styles.subtitle}>Questions ajoutées :</Text>
-              <FlatList
-                data={questions}
-                keyExtractor={(item, index) => index.toString()}
-                renderItem={({ item, index }) => (
-                  <View style={styles.questionItem}>
-                    <Text style={styles.questionTitle}>
-                      {index + 1}. {item.question}
-                    </Text>
-                    <Text style={styles.questionAnswer}>✅ {item.answer}</Text>
-                  </View>
-                )}
-              />
-            </View>
-          )}
-
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSaveQuiz}>
-            <Text style={styles.saveBtnText}>💾 Enregistrer le quiz complet</Text>
-          </TouchableOpacity>
         </View>
+
+        {subthemes.map((sub, sIndex) => (
+          <View key={sIndex} style={styles.subthemeCard}>
+            {/* Header sous-thème */}
+            <View style={styles.subHeader}>
+              <TouchableOpacity onPress={() => toggleOpen(sIndex)} style={styles.subHeaderLeft}>
+                <Ionicons
+                  name={sub.open ? "chevron-down" : "chevron-forward"}
+                  size={18}
+                  color={PRIMARY}
+                />
+                <TextInput
+                  style={styles.subNameInput}
+                  placeholder={`Sous-thème ${sIndex + 1}`}
+                  value={sub.name}
+                  onChangeText={(text) => setSub(sIndex, { name: text })}
+                />
+              </TouchableOpacity>
+
+              <View style={styles.subHeaderRight}>
+                <Badge small value={`${sub.questions.length}`} />
+                {subthemes.length > 1 && (
+                  <TouchableOpacity onPress={() => removeSubtheme(sIndex)} style={styles.iconBtn}>
+                    <Ionicons name="trash-outline" size={18} color={DANGER} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {/* Corps sous-thème */}
+            {sub.open && (
+              <View style={{ marginTop: 8 }}>
+                {sub.questions.map((q, qIndex) => (
+                  <View key={qIndex} style={styles.questionCard}>
+                    {/* Question header actions */}
+                    <View style={styles.questionTop}>
+                      <Text style={styles.questionTitle}>Question {qIndex + 1}</Text>
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                        <IconPill
+                          icon="copy-outline"
+                          onPress={() => duplicateQuestion(sIndex, qIndex)}
+                          label="Dupliquer"
+                        />
+                        <IconPill
+                          icon="trash-outline"
+                          color={DANGER}
+                          onPress={() => removeQuestion(sIndex, qIndex)}
+                          label="Supprimer"
+                        />
+                      </View>
+                    </View>
+
+                    {/* Intitulé */}
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Texte de la question"
+                      value={q.question}
+                      onChangeText={(text) => updateQuestion(sIndex, qIndex, "question", text)}
+                    />
+
+                    {/* Type chips */}
+                    <Text style={styles.label}>Type</Text>
+                    <View style={styles.chipsRow}>
+                      <Chip
+                        active={q.type === "true_false"}
+                        onPress={() => updateQuestion(sIndex, qIndex, "type", "true_false") || updateQuestion(sIndex, qIndex, "answer", "")}
+                        text="Vrai / Faux"
+                        icon="git-commit-outline"
+                      />
+                      <Chip
+                        active={q.type === "multiple_choice"}
+                        onPress={() => updateQuestion(sIndex, qIndex, "type", "multiple_choice") || updateQuestion(sIndex, qIndex, "answer", "")}
+                        text="QCM"
+                        icon="list-outline"
+                      />
+                      <Chip
+                        active={q.type === "open"}
+                        onPress={() => updateQuestion(sIndex, qIndex, "type", "open")}
+                        text="Réponse libre"
+                        icon="create-outline"
+                      />
+                    </View>
+
+                    {/* UI par type */}
+                    {q.type === "true_false" && (
+                      <View style={styles.tfRow}>
+                        <TFButton
+                          text="Vrai"
+                          selected={q.answer === "true"}
+                          onPress={() => updateQuestion(sIndex, qIndex, "answer", "true")}
+                        />
+                        <TFButton
+                          text="Faux"
+                          selected={q.answer === "false"}
+                          onPress={() => updateQuestion(sIndex, qIndex, "answer", "false")}
+                        />
+                      </View>
+                    )}
+
+                    {q.type === "multiple_choice" && (
+                      <View>
+                        {(q.options?.length ? q.options : ["", ""]).map((opt, optIndex) => (
+                          <View key={optIndex} style={styles.optionRow}>
+                            <TouchableOpacity
+                              style={styles.radio}
+                              onPress={() => selectCorrectOption(sIndex, qIndex, opt)}
+                            >
+                              <Ionicons
+                                name={
+                                  q.answer === opt ? "checkmark-circle" : "ellipse-outline"
+                                }
+                                size={20}
+                                color={q.answer === opt ? PRIMARY : TEXT_MUTED}
+                              />
+                            </TouchableOpacity>
+                            <TextInput
+                              style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                              placeholder={`Option ${optIndex + 1}`}
+                              value={opt}
+                              onChangeText={(text) => updateOption(sIndex, qIndex, optIndex, text)}
+                            />
+                            {q.options?.length > 0 && (
+                              <TouchableOpacity
+                                style={[styles.iconBtn, { marginLeft: 8 }]}
+                                onPress={() => removeOption(sIndex, qIndex, optIndex)}
+                              >
+                                <Ionicons name="close-circle-outline" size={18} color={TEXT_MUTED} />
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        ))}
+
+                        <TouchableOpacity style={styles.addInline} onPress={() => addOption(sIndex, qIndex)}>
+                          <Ionicons name="add-circle-outline" size={18} color={PRIMARY} />
+                          <Text style={{ color: PRIMARY, marginLeft: 6 }}>Ajouter une option</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
+                    {q.type === "open" && (
+                      <View>
+                        <Text style={styles.muted}>
+                          (Facultatif) Saisis une réponse attendue pour correction auto.
+                        </Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Réponse correcte (optionnelle)"
+                          value={q.answer}
+                          onChangeText={(text) => updateQuestion(sIndex, qIndex, "answer", text)}
+                        />
+                      </View>
+                    )}
+                  </View>
+                ))}
+
+                <TouchableOpacity style={styles.addQuestion} onPress={() => addQuestion(sIndex)}>
+                  <Ionicons name="add" size={18} color="#fff" />
+                  <Text style={styles.addQuestionText}>Ajouter une question</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        ))}
+
+        <TouchableOpacity style={styles.addSubtheme} onPress={addSubtheme}>
+          <Ionicons name="add-circle-outline" size={22} color={PRIMARY} />
+          <Text style={{ color: PRIMARY, marginLeft: 8 }}>Ajouter un sous-thème</Text>
+        </TouchableOpacity>
       </ScrollView>
+
+      {/* Footer sticky */}
+      <View style={styles.footer}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Badge icon="albums-outline" value={`${subthemes.length}`} />
+          <Badge icon="help-circle-outline" value={`${totalQuestions}`} />
+        </View>
+        <TouchableOpacity style={styles.saveButton} onPress={saveQuiz}>
+          <Ionicons name="save-outline" size={18} color="#fff" />
+          <Text style={styles.saveButtonText}>Enregistrer</Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+/* ---------- UI atoms ---------- */
+function Badge({ value, icon, small }) {
+  return (
+    <View style={[badgeStyles.badge, small && badgeStyles.small]}>
+      {icon && <Ionicons name={icon} size={small ? 12 : 14} color={PRIMARY} style={{ marginRight: 4 }} />}
+      <Text style={[badgeStyles.text, small && { fontSize: 11 }]}>{value}</Text>
     </View>
   );
 }
 
+function Chip({ active, onPress, text, icon }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[chipStyles.chip, active && chipStyles.active]}
+    >
+      {icon && (
+        <Ionicons
+          name={icon}
+          size={14}
+          color={active ? "#fff" : PRIMARY}
+          style={{ marginRight: 6 }}
+        />
+      )}
+      <Text style={[chipStyles.text, active && { color: "#fff" }]}>{text}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function TFButton({ text, selected, onPress }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[tfStyles.btn, selected && tfStyles.selected]}
+    >
+      <Text style={[tfStyles.text, selected && { color: "#fff" }]}>{text}</Text>
+    </TouchableOpacity>
+  );
+}
+
+/* ---------- Styles ---------- */
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
+  header: { paddingHorizontal: 16, paddingTop: 12, backgroundColor: SURFACE },
+  headerTitle: { fontSize: 22, fontWeight: "800", marginBottom: 6 },
+  counters: { flexDirection: "row", gap: 8, marginBottom: 10 },
+
+  container: { flex: 1, backgroundColor: "#F2F4F8" },
+
+  card: {
+    backgroundColor: SURFACE,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+    margin: 16,
+    padding: 12,
   },
 
-  // === HEADER ===
-  header: {
+  label: { color: TEXT_MUTED, fontSize: 13, marginBottom: 6 },
+  input: {
+    backgroundColor: SURFACE,
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    marginBottom: 10,
+  },
+
+  subthemeCard: {
+    backgroundColor: SURFACE,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    marginHorizontal: 16,
+    marginBottom: 14,
+    overflow: "hidden",
+  },
+
+  subHeader: {
+    padding: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#fff",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    backgroundColor: CARD,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
+    borderBottomColor: BORDER,
   },
-  backButton: {
+  subHeaderLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
+  subNameInput: {
+    flex: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: SURFACE,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: BORDER,
+    marginLeft: 8,
+    fontWeight: "600",
+  },
+  subHeaderRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  iconBtn: {
     padding: 6,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1e293b",
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: BORDER,
   },
 
-  // === CONTENU ===
-  card: {
-    backgroundColor: "#fff",
-    width: "95%",
-    maxWidth: 700,
-    borderRadius: 16,
-    padding: 24,
-    marginVertical: 20,
+  questionCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+    marginHorizontal: 12,
+    marginBottom: 12,
+    padding: 12,
+  },
+  questionTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  icon: {
-    fontSize: 38,
-    marginBottom: 10,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#1e293b",
-    marginBottom: 20,
-  },
-  subtitle: {
-    alignSelf: "flex-start",
-    fontWeight: "600",
-    color: "#334155",
-    marginTop: 10,
     marginBottom: 8,
   },
-  input: {
-    width: "100%",
-    backgroundColor: "#f1f5f9",
-    padding: 12,
+  questionTitle: { fontWeight: "700" },
+
+  chipsRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
+
+  tfRow: { flexDirection: "row", gap: 10, marginTop: 6 },
+
+  optionRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
+  radio: { marginRight: 8 },
+
+  addInline: { flexDirection: "row", alignItems: "center", marginTop: 8 },
+
+  addQuestion: {
+    flexDirection: "row",
+    backgroundColor: PRIMARY,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    color: "#111",
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    alignSelf: "flex-start",
-    fontWeight: "700",
-    color: "#0f172a",
-    fontSize: 18,
-    marginTop: 20,
-    marginBottom: 6,
-  },
-  smallButton: {
-    alignSelf: "flex-start",
-    marginBottom: 10,
-  },
-  smallButtonText: {
-    color: "#2563eb",
-    fontWeight: "600",
-  },
-  addQuestionBtn: {
-    backgroundColor: "#3b82f6",
     paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    marginTop: 8,
-  },
-  addQuestionText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-  questionsList: {
-    width: "100%",
-    marginTop: 20,
-    backgroundColor: "#f9fafb",
-    borderRadius: 10,
-    padding: 10,
-  },
-  questionItem: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    paddingVertical: 6,
-  },
-  questionTitle: {
-    fontSize: 15,
-    color: "#1e293b",
-    fontWeight: "500",
-  },
-  questionAnswer: {
-    fontSize: 13,
-    color: "#22c55e",
-  },
-  saveBtn: {
-    width: "100%",
-    backgroundColor: "#16a34a",
-    paddingVertical: 14,
-    borderRadius: 10,
+    paddingHorizontal: 12,
     alignItems: "center",
-    marginTop: 20,
+    justifyContent: "center",
+    margin: 12,
   },
-  saveBtnText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 16,
+  addQuestionText: { color: "#fff", fontWeight: "700", marginLeft: 6 },
+
+  addSubtheme: {
+    marginHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 130,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: PRIMARY,
+    backgroundColor: "#FBFAFF",
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
   },
+
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    backgroundColor: SURFACE,
+    padding: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  saveButton: {
+    backgroundColor: SUCCESS,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  saveButtonText: { color: "#fff", fontWeight: "800" },
 });
+
+const badgeStyles = StyleSheet.create({
+  badge: {
+    borderWidth: 1,
+    borderColor: PRIMARY,
+    backgroundColor: "#F1EFFF",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  text: { color: PRIMARY, fontWeight: "700", fontSize: 12 },
+  small: { paddingHorizontal: 6, paddingVertical: 2 },
+});
+
+const chipStyles = StyleSheet.create({
+  chip: {
+    borderWidth: 1,
+    borderColor: PRIMARY,
+    backgroundColor: "#fff",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  active: { backgroundColor: PRIMARY },
+  text: { color: PRIMARY, fontWeight: "700", fontSize: 12 },
+});
+
+const tfStyles = StyleSheet.create({
+  btn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: PRIMARY,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+  selected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  text: { color: PRIMARY, fontWeight: "700" },
+});
+
+/* ---------- Small icon pill ---------- */
+function IconPill({ icon, onPress, label, color = TEXT_MUTED }) {
+  return (
+    <TouchableOpacity onPress={onPress} style={{ flexDirection: "row", alignItems: "center" }}>
+      <Ionicons name={icon} size={18} color={color} />
+      {!!label && <Text style={{ color, marginLeft: 4, fontWeight: "600" }}>{label}</Text>}
+    </TouchableOpacity>
+  );
+}
