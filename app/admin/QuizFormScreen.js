@@ -35,7 +35,9 @@ const TEXT_MUTED = "#64748B";
 
 export default function QuizFormScreen() {
   const router = useRouter();
-  const { quizId } = useLocalSearchParams();
+
+  // 🔹 Récupère aussi les params de création rapide
+  const { quizId, quickType, subthemesCount, questionsCount } = useLocalSearchParams();
   const isEdit = !!quizId;
 
   const [loading, setLoading] = useState(isEdit);
@@ -79,6 +81,39 @@ export default function QuizFormScreen() {
     };
     load();
   }, [isEdit, quizId, router]);
+
+  // --------- Pré-remplissage depuis la “Création rapide” ---------
+  useEffect(() => {
+    if (isEdit) return; // ne rien faire en mode édition
+    if (!quickType) return;
+
+    const sCount = Math.max(1, Math.min(20, Number(subthemesCount) || 1));
+    const qCount = Math.max(1, Math.min(50, Number(questionsCount) || 1));
+    const type = String(quickType);
+
+    const buildQuestionByType = (t) => {
+      if (t === "multiple_choice") {
+        return { question: "", type: "multiple_choice", options: ["", ""], answer: "" };
+      }
+      if (t === "true_false") {
+        return { question: "", type: "true_false", options: [], answer: "" };
+      }
+      if (t === "open") {
+        return { question: "", type: "open", options: [], answer: "" };
+      }
+      // agree_disagree (aucune “bonne réponse”)
+      return { question: "", type: "agree_disagree", options: [], answer: "" };
+    };
+
+    const prefilled = Array.from({ length: sCount }).map((_, si) => ({
+      name: `Sous-thème ${si + 1}`,
+      open: si === 0, // ouvre le premier
+      questions: Array.from({ length: qCount }).map(() => buildQuestionByType(type)),
+    }));
+
+    setSubthemes(prefilled);
+    setExpandedSubtheme(0);
+  }, [isEdit, quickType, subthemesCount, questionsCount]);
 
   const totalQuestions = useMemo(
     () => subthemes.reduce((acc, s) => acc + (s?.questions?.length || 0), 0),
@@ -307,7 +342,10 @@ export default function QuizFormScreen() {
         questions: questions.map((q) => ({
           question: q.question.trim(),
           type: q.type,
-          options: (q.type === "multiple_choice" ? (q.options || []).filter((o) => o.trim()) : []),
+          options:
+            q.type === "multiple_choice"
+              ? (q.options || []).filter((o) => o.trim())
+              : [],
           // pour agree_disagree, on NE stocke PAS de "answer"
           answer: q.type === "agree_disagree" ? "" : q.answer,
         })),
@@ -359,54 +397,55 @@ export default function QuizFormScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-     {/* Header fixe avec progression */}
-<View style={styles.header}>
-  <View style={styles.headerTop}>
-    {/* Bouton retour */}
-    <TouchableOpacity 
-      style={styles.backButton}
-      onPress={() => router.back()}
-    >
-      <Ionicons name="arrow-back" size={24} color={TEXT} />
-    </TouchableOpacity>
+      {/* Header fixe avec progression */}
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
+          {/* Bouton retour */}
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color={TEXT} />
+          </TouchableOpacity>
 
-    <View style={styles.headerContent}>
-      <Text style={styles.headerTitle}>
-        {isEdit ? "Modifier un quiz" : "Créer un quiz"}
-      </Text>
-      <Text style={styles.headerSubtitle}>
-        {isEdit
-          ? "Mettez à jour le thème et les questions"
-          : "Remplissez les informations ci-dessous"}
-      </Text>
-    </View>
-    
-    <View style={styles.stats}>
-      <StatBadge icon="layers-outline" value={subthemes.length} label="thèmes" />
-      <StatBadge icon="help-circle-outline" value={totalQuestions} label="questions" />
-    </View>
-  </View>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>
+              {isEdit ? "Modifier un quiz" : "Créer un quiz"}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              {isEdit
+                ? "Mettez à jour le thème et les questions"
+                : "Remplissez les informations ci-dessous"}
+            </Text>
+          </View>
+          
+          <View style={styles.stats}>
+            <StatBadge icon="layers-outline" value={subthemes.length} label="thèmes" />
+            <StatBadge icon="help-circle-outline" value={totalQuestions} label="questions" />
+          </View>
+        </View>
         {/* Titre du quiz */}
-  <View style={styles.titleSection}>
-    <Text style={styles.sectionLabel}>Titre du quiz</Text>
-    <TextInput
-      style={[
-        styles.titleInput,
-        errors?.title && styles.inputError,
-      ]}
-      placeholder="Ex : Physique Médicale, Histoire de France..."
-      placeholderTextColor="#94A3B8"
-      value={title}
-      onChangeText={(t) => {
-        setTitle(t);
-        if (errors?.title && t.trim()) {
-          setErrors((prev) => ({ ...prev, title: null }));
-        }
-      }}
-    />
-    {errors?.title && <Text style={styles.errorText}>{errors.title}</Text>}
-  </View>
-</View>
+        <View style={styles.titleSection}>
+          <Text style={styles.sectionLabel}>Titre du quiz</Text>
+          <TextInput
+            style={[
+              styles.titleInput,
+              errors?.title && styles.inputError,
+            ]}
+            placeholder="Ex : Physique Médicale, Histoire de France..."
+            placeholderTextColor="#94A3B8"
+            value={title}
+            onChangeText={(t) => {
+              setTitle(t);
+              if (errors?.title && t.trim()) {
+                setErrors((prev) => ({ ...prev, title: null }));
+              }
+            }}
+          />
+          {errors?.title && <Text style={styles.errorText}>{errors.title}</Text>}
+        </View>
+      </View>
+
       {/* Liste des sous-thèmes */}
       <ScrollView
         style={styles.scrollView}
@@ -1139,7 +1178,6 @@ const typeStyles = StyleSheet.create({
   text: { fontSize: 13, fontWeight: "600", color: PRIMARY },
   textActive: { color: "#fff" },
 });
-
 
 const tfBtnStyles = StyleSheet.create({
   btn: {

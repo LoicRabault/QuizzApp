@@ -1,3 +1,4 @@
+// app/admin/AdminHomeScreen.js
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
@@ -10,7 +11,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
 } from "react-native";
 
 import { auth, db } from "../../services/firebase";
@@ -23,11 +24,16 @@ export default function AdminHomeScreen() {
   const [userName, setUserName] = useState("Admin");
   const [scaleAnim] = useState(new Animated.Value(1));
 
+  // --- Modale de création rapide ---
+  const [quickModalVisible, setQuickModalVisible] = useState(false);
+  const [quickType, setQuickType] = useState(null); // "agree_disagree" | "multiple_choice" | "true_false" | "open"
+  const [subCount, setSubCount] = useState(3);
+  const [qCount, setQCount] = useState(5);
+
   useEffect(() => {
-    // Récupérer le nom de l'utilisateur
     const user = auth.currentUser;
     if (user) {
-      setUserName(user.displayName || user.email?.split('@')[0] || "Admin");
+      setUserName(user.displayName || user.email?.split("@")[0] || "Admin");
     }
   }, []);
 
@@ -65,24 +71,42 @@ export default function AdminHomeScreen() {
     fetchQuizzes();
   }, []);
 
-  const ActionCard = ({ icon, title, description, gradient, onPress }) => {
+  const ActionCard = ({ icon, title, description, gradient, onPress, small = false }) => {
     const [pressed, setPressed] = useState(false);
+    const iconSize = small ? 22 : 28;
 
     return (
       <Pressable
         onPress={onPress}
         onPressIn={() => setPressed(true)}
         onPressOut={() => setPressed(false)}
-        style={[styles.actionCard, pressed && styles.actionCardPressed]}
+        style={[
+          styles.actionCard,
+          pressed && styles.actionCardPressed,
+          small && styles.actionCardSmall,
+        ]}
       >
-        <View style={[styles.actionCardGradient, gradient]}>
-          <View style={styles.iconContainer}>
-            <Ionicons name={icon} size={28} color="#fff" />
+        <View
+          style={[
+            styles.actionCardGradient,
+            gradient,
+            small && styles.actionCardGradientSmall,
+          ]}
+        >
+          <View style={[styles.iconContainer, small && styles.iconContainerSmall]}>
+            <Ionicons name={icon} size={iconSize} color="#fff" />
           </View>
-          <Text style={styles.actionTitle}>{title}</Text>
-          <Text style={styles.actionDescription}>{description}</Text>
-          <View style={styles.arrowContainer}>
-            <Ionicons name="arrow-forward" size={20} color="#fff" />
+          <Text style={[styles.actionTitle, small && styles.actionTitleSmall]} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text
+            style={[styles.actionDescription, small && styles.actionDescriptionSmall]}
+            numberOfLines={1}
+          >
+            {description}
+          </Text>
+          <View style={[styles.arrowContainer, small && styles.arrowContainerSmall]}>
+            <Ionicons name="arrow-forward" size={small ? 16 : 20} color="#fff" />
           </View>
         </View>
       </Pressable>
@@ -139,6 +163,47 @@ export default function AdminHomeScreen() {
     );
   };
 
+  // --- Quick create helpers ---
+  const openQuickCreate = (type) => {
+    setQuickType(type);
+    setSubCount(3);
+    setQCount(5);
+    setQuickModalVisible(true);
+  };
+
+  const confirmQuickCreate = () => {
+    setQuickModalVisible(false);
+    router.push({
+      pathname: "/admin/QuizFormScreen",
+      params: {
+        quickType: quickType,
+        subthemesCount: String(subCount),
+        questionsCount: String(qCount),
+      },
+    });
+  };
+
+  const Counter = ({ label, value, onDec, onInc, min = 1, max = 50 }) => (
+    <View style={styles.counterRow}>
+      <Text style={styles.counterLabel}>{label}</Text>
+      <View style={styles.counterBox}>
+        <Pressable
+          style={[styles.counterBtn, value <= min && { opacity: 0.4 }]}
+          onPress={() => value > min && onDec(value - 1)}
+        >
+          <Ionicons name="remove" size={18} color="#0f172a" />
+        </Pressable>
+        <Text style={styles.counterValue}>{value}</Text>
+        <Pressable
+          style={[styles.counterBtn, value >= max && { opacity: 0.4 }]}
+          onPress={() => value < max && onInc(value + 1)}
+        >
+          <Ionicons name="add" size={18} color="#0f172a" />
+        </Pressable>
+      </View>
+    </View>
+  );
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
@@ -169,6 +234,47 @@ export default function AdminHomeScreen() {
             description="Voir tous"
             gradient={styles.gradientBlue}
             onPress={() => router.push("/admin/QuizListScreen")}
+          />
+        </View>
+      </View>
+
+      {/* Créations rapides (4 boutons) — RÉDUITS */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Créations rapides</Text>
+        <View style={styles.actionsGrid}>
+          <ActionCard
+            small
+            icon="swap-vertical-outline"
+            title="D’accord / Pas d’accord"
+            description="Binaire sans bonne réponse"
+            gradient={styles.gradientBlue}
+            onPress={() => openQuickCreate("agree_disagree")}
+          />
+          <ActionCard
+            small
+            icon="list"
+            title="QCM"
+            description="Options + réponse correcte"
+            gradient={styles.gradientPurple}
+            onPress={() => openQuickCreate("multiple_choice")}
+          />
+        </View>
+        <View style={[styles.actionsGrid, { marginTop: 16 }]}>
+          <ActionCard
+            small
+            icon="git-commit-outline"
+            title="Vrai / Faux"
+            description="Choix unique"
+            gradient={styles.gradientPurple}
+            onPress={() => openQuickCreate("true_false")}
+          />
+          <ActionCard
+            small
+            icon="create-outline"
+            title="Réponse libre"
+            description="Texte ouvert"
+            gradient={styles.gradientBlue}
+            onPress={() => openQuickCreate("open")}
           />
         </View>
       </View>
@@ -241,6 +347,59 @@ export default function AdminHomeScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Modale création rapide */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={quickModalVisible}
+        onRequestClose={() => setQuickModalVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setQuickModalVisible(false)}>
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.modalIcon, { backgroundColor: "#e0e7ff" }]}>
+              <Ionicons name="flash-outline" size={32} color="#6366f1" />
+            </View>
+            <Text style={styles.modalTitle}>Création rapide</Text>
+            <Text style={styles.modalMessage}>
+              Choisissez le nombre de sous-thèmes et de questions par sous-thème.
+            </Text>
+
+            <Counter
+              label="Sous-thèmes"
+              value={subCount}
+              onDec={(v) => setSubCount(v)}
+              onInc={(v) => setSubCount(v)}
+              min={1}
+              max={20}
+            />
+            <Counter
+              label="Questions / sous-thème"
+              value={qCount}
+              onDec={(v) => setQCount(v)}
+              onInc={(v) => setQCount(v)}
+              min={1}
+              max={50}
+            />
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setQuickModalVisible(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>Annuler</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.quickConfirmBtn]}
+                onPress={confirmQuickCreate}
+              >
+                <Ionicons name="arrow-forward" size={18} color="#fff" />
+                <Text style={styles.quickConfirmText}>Continuer</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -300,17 +459,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-sectionTitle: {
-  fontSize: 24,
-  fontWeight: "800",
-  color: "#0f172a",
-  letterSpacing: -0.5,
-  marginLeft: 8,
-  borderLeftWidth: 4,
-  borderLeftColor: "#6366f1",
-  paddingLeft: 12,
-  marginBottom: 24
-},
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#0f172a",
+    letterSpacing: -0.5,
+    marginLeft: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: "#6366f1",
+    paddingLeft: 12,
+    marginBottom: 24,
+  },
 
   seeAllText: {
     fontSize: 14,
@@ -341,6 +500,34 @@ sectionTitle: {
     minHeight: 160,
     justifyContent: "space-between",
   },
+
+  // ▼▼ Taille réduite pour les 4 boutons
+  actionCardSmall: {
+    borderRadius: 16,
+  },
+  actionCardGradientSmall: {
+    padding: 14,
+    minHeight: 116,
+  },
+  iconContainerSmall: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+  },
+  actionTitleSmall: {
+    fontSize: 16,
+    marginTop: 8,
+  },
+  actionDescriptionSmall: {
+    fontSize: 12,
+  },
+  arrowContainerSmall: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+  },
+  // ▲▲ Taille réduite
+
   gradientPurple: {
     backgroundColor: "#6366f1",
   },
@@ -468,7 +655,7 @@ sectionTitle: {
     color: "#64748b",
   },
 
-  // Modal
+  // Modal (déconnexion)
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -520,6 +707,9 @@ sectionTitle: {
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
   },
   modalButtonCancel: {
     backgroundColor: "#f1f5f9",
@@ -536,5 +726,52 @@ sectionTitle: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+
+  // Modale création rapide
+  counterRow: {
+    width: "100%",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  counterLabel: {
+    fontSize: 13,
+    color: "#64748b",
+    marginBottom: 6,
+    fontWeight: "600",
+  },
+  counterBox: {
+    backgroundColor: "#f1f5f9",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  counterBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  counterValue: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  quickConfirmBtn: {
+    backgroundColor: "#6366f1",
+  },
+  quickConfirmText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });
