@@ -106,23 +106,24 @@ export default function ParticipateQuizScreen() {
   const handleFinishQuiz = () => setShowFinishModal(true);
 
   const submitQuiz = async () => {
-    try {
-      const resultRef = await addDoc(collection(db, 'quizzes', quizId, 'results'), {
-        participantName,
-        answers,
-        completedAt: serverTimestamp(),
-        totalQuestions,
-        answeredCount: Object.keys(answers).filter(k => answers[k]?.toString().trim()).length,
-      });
+  try {
+    const resultRef = await addDoc(collection(db, 'quizzes', quizId, 'results'), {
+      participantName,
+      answers,
+      completedAt: serverTimestamp(),
+      totalQuestions,
+      answeredCount: Object.keys(answers).filter(k => answers[k]?.toString().trim()).length,
+      isFinished: true,  // ✅ AJOUTE CETTE LIGNE
+    });
 
-      router.replace({
-        pathname: '/quizz/waiting',
-        params: { quizId, participantName, resultId: resultRef.id },
-      });
-    } catch (error) {
-      alert("Erreur d'enregistrement : " + error.message);
-    }
-  };
+    router.replace({
+      pathname: '/quizz/waiting',
+      params: { quizId, participantName, resultId: resultRef.id },
+    });
+  } catch (error) {
+    alert("Erreur d'enregistrement : " + error.message);
+  }
+};
 
   // --- Rendu des types de question ---
   const renderQuestionInput = () => {
@@ -220,56 +221,54 @@ export default function ParticipateQuizScreen() {
           />
         );
 
-      // ✅ NOUVEAU TYPE “D’accord / Pas d’accord”
-      case 'agree_disagree':
-        return (
-          <View style={styles.agreeContainer}>
-            <TouchableOpacity
-              style={[
-                styles.agreeButton,
-                currentAnswer === '1' && styles.agreeSelected,
-              ]}
-              onPress={() => saveAnswer('1')}
-            >
-              <Ionicons
-                name="thumbs-up"
-                size={28}
-                color={currentAnswer === '1' ? '#fff' : SUCCESS}
-              />
-              <Text
-                style={[
-                  styles.agreeText,
-                  currentAnswer === '1' && styles.agreeTextSelected,
-                ]}
-              >
-                D’accord
-              </Text>
-            </TouchableOpacity>
+  case 'agree_disagree':
+  return (
+    <View style={styles.agreeContainer}>
+      <TouchableOpacity
+        style={[
+          styles.agreeButton,
+          currentAnswer === 'agree' && styles.agreeSelected,  // ← 'agree'
+        ]}
+        onPress={() => saveAnswer('agree')}  // ← 'agree'
+      >
+        <Ionicons
+          name="thumbs-up"
+          size={28}
+          color={currentAnswer === 'agree' ? '#fff' : SUCCESS}
+        />
+        <Text
+          style={[
+            styles.agreeText,
+            currentAnswer === 'agree' && styles.agreeTextSelected,
+          ]}
+        >
+          D'accord
+        </Text>
+      </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[
-                styles.agreeButton,
-                currentAnswer === '0' && styles.disagreeSelected,
-              ]}
-              onPress={() => saveAnswer('0')}
-            >
-              <Ionicons
-                name="thumbs-down"
-                size={28}
-                color={currentAnswer === '0' ? '#fff' : DANGER}
-              />
-              <Text
-                style={[
-                  styles.agreeText,
-                  currentAnswer === '0' && styles.agreeTextSelected,
-                ]}
-              >
-                Pas d’accord
-              </Text>
-            </TouchableOpacity>
-          </View>
-        );
-
+      <TouchableOpacity
+        style={[
+          styles.agreeButton,
+          currentAnswer === 'disagree' && styles.disagreeSelected,  // ← 'disagree'
+        ]}
+        onPress={() => saveAnswer('disagree')}  // ← 'disagree'
+      >
+        <Ionicons
+          name="thumbs-down"
+          size={28}
+          color={currentAnswer === 'disagree' ? '#fff' : DANGER}
+        />
+        <Text
+          style={[
+            styles.agreeText,
+            currentAnswer === 'disagree' && styles.agreeTextSelected,
+          ]}
+        >
+          Pas d'accord
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
       default:
         return null;
     }

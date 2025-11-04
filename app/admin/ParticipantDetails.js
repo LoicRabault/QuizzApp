@@ -4,12 +4,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { db } from '../../services/firebase';
 
@@ -77,33 +77,36 @@ export default function ParticipantDetails() {
   };
 
   subtheme.questions.forEach((question, qIndex) => {
-    const answerKey = `${subIndex}-${qIndex}`;
-    const userAnswer = result.answers[answerKey];
-    let isCorrect = false;
-    let hasAnswer = false;
+  const answerKey = `${subIndex}-${qIndex}`;
+  const userAnswer = result.answers[answerKey];
+  let isCorrect = false;
+  let hasAnswer = false;
 
-    if (userAnswer !== undefined && userAnswer !== '') {
-      hasAnswer = true;
-      
-      if (question.type === 'open') {
-        if (question.answer && userAnswer) {
-          isCorrect = userAnswer.toLowerCase().trim() === question.answer.toLowerCase().trim();
-        }
-      } else {
-        isCorrect = userAnswer === question.answer;
-      }
-
-      if (isCorrect) {
-        correct++;
-        correctSub++;
-      } else {
-        wrong++;
-        wrongSub++;
+  if (userAnswer !== undefined && userAnswer !== '') {
+    hasAnswer = true;
+    
+    if (question.type === 'agree_disagree') {
+      // Pour agree_disagree, toute réponse est "correcte"
+      isCorrect = (userAnswer === 'agree' || userAnswer === 'disagree');
+    } else if (question.type === 'open') {
+      if (question.answer && userAnswer) {
+        isCorrect = userAnswer.toLowerCase().trim() === question.answer.toLowerCase().trim();
       }
     } else {
-      unanswered++;
-      unansweredSub++;
+      isCorrect = userAnswer === question.answer;
     }
+
+    if (isCorrect) {
+      correct++;
+      correctSub++;
+    } else {
+      wrong++;
+      wrongSub++;
+    }
+  } else {
+    unanswered++;
+    unansweredSub++;
+  }
 
     subthemeDetails.questions.push({
       question: question.question,
@@ -229,13 +232,14 @@ export default function ParticipantDetails() {
                     <Text style={styles.questionNumberText}>Q{qIndex + 1}</Text>
                   </View>
                   
-                  <View style={styles.questionType}>
-                    <Text style={styles.questionTypeText}>
-                      {q.type === 'true_false' && '✓ Vrai/Faux'}
-                      {q.type === 'multiple_choice' && '☰ QCM'}
-                      {q.type === 'open' && '✎ Libre'}
-                    </Text>
-                  </View>
+                <View style={styles.questionType}>
+  <Text style={styles.questionTypeText}>
+    {q.type === 'true_false' && '✓ Vrai/Faux'}
+    {q.type === 'multiple_choice' && '☰ QCM'}
+    {q.type === 'open' && '✎ Libre'}
+    {q.type === 'agree_disagree' && '⇄ D/P'}  {/* ✅ Juste le label */}
+  </Text>
+</View>
 
                   <View style={[
                     styles.resultBadge,
@@ -324,6 +328,25 @@ export default function ParticipantDetails() {
                       ))}
                     </View>
                   )}
+                  {q.type === 'agree_disagree' && (
+  <View style={styles.answerBlock}>
+    <Text style={styles.answerLabel}>
+      <Ionicons name="person" size={14} color={TEXT_MUTED} /> Réponse du participant
+    </Text>
+    <View style={[styles.answerBox, styles.answerBoxCorrect]}>
+      <Text style={styles.answerText}>
+        {q.userAnswer === 'agree' ? "D'accord ✓" : 
+         q.userAnswer === 'disagree' ? "Pas d'accord ✗" : 
+         'Pas de réponse'}
+      </Text>
+    </View>
+    <View style={[styles.answerBox, { marginTop: 8, borderColor: PRIMARY }]}>
+      <Text style={{ fontSize: 12, color: TEXT_MUTED }}>
+        ℹ️ Question sans bonne/mauvaise réponse (opinion personnelle)
+      </Text>
+    </View>
+  </View>
+)}
                 </View>
               </View>
             ))}

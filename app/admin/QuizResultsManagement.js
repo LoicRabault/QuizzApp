@@ -4,12 +4,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { db } from '../../services/firebase';
 
@@ -73,7 +73,45 @@ export default function QuizResultsManagement() {
       setLoading(false);
     }
   };
+const handleExportCSV = async () => {
+  if (results.length === 0) {
+    Alert.alert('Aucune donnée', 'Il n\'y a pas de résultats à exporter');
+    return;
+  }
 
+  Alert.alert(
+    'Exporter les résultats',
+    'Quel type d\'export souhaitez-vous ?',
+    [
+      {
+        text: 'Annuler',
+        style: 'cancel'
+      },
+      {
+        text: 'Export simple',
+        onPress: async () => {
+          const result = await exportResultsToCSV(quiz, results, quizTitle);
+          if (result.success) {
+            Alert.alert('Succès', result.message);
+          } else {
+            Alert.alert('Erreur', result.message);
+          }
+        }
+      },
+      {
+        text: 'Export détaillé',
+        onPress: async () => {
+          const result = await exportDetailedResultsToCSV(quiz, results, quizTitle);
+          if (result.success) {
+            Alert.alert('Succès', result.message);
+          } else {
+            Alert.alert('Erreur', result.message);
+          }
+        }
+      }
+    ]
+  );
+};
   const calculateScore = (result, quizData) => {
     if (!result.answers || !quizData.subthemes) return 0;
 
@@ -280,11 +318,13 @@ export default function QuizResultsManagement() {
 
         {/* Bouton export (futur) */}
         <View style={styles.actionsCard}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="download-outline" size={20} color={PRIMARY} />
-            <Text style={styles.actionButtonText}>Exporter en CSV</Text>
-          </TouchableOpacity>
-
+    <TouchableOpacity 
+  style={styles.actionButton}
+  onPress={handleExportCSV} // ✅ Ajoute l'action
+>
+  <Ionicons name="download-outline" size={20} color={PRIMARY} />
+  <Text style={styles.actionButtonText}>Exporter en CSV</Text>
+</TouchableOpacity>
           <TouchableOpacity 
             style={[styles.actionButton, styles.actionButtonSecondary]}
             onPress={() => {

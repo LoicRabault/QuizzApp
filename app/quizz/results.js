@@ -4,12 +4,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { db } from '../../services/firebase';
 
@@ -79,38 +79,40 @@ export default function ResultsScreen() {
   };
 
   // Calculer le score d'un participant
-  const calculateScore = (result, quizData) => {
-    if (!result.answers || !quizData.subthemes) return 0;
+ const calculateScore = (result, quizData) => {
+  if (!result.answers || !quizData.subthemes) return 0;
 
-    let correctAnswers = 0;
-    let totalQuestions = 0;
+  let correctAnswers = 0;
+  let totalQuestions = 0;
 
-    quizData.subthemes.forEach((subtheme, subIndex) => {
-      subtheme.questions.forEach((question, qIndex) => {
-        totalQuestions++;
-        const answerKey = `${subIndex}-${qIndex}`;
-        const userAnswer = result.answers[answerKey];
-        
-        // Vérifier si la réponse est correcte
-        if (question.type === 'open') {
-          // Pour les questions ouvertes, on accepte si l'answer est défini
-          if (question.answer && userAnswer) {
-            // Comparaison simple (case insensitive)
-            if (userAnswer.toLowerCase().trim() === question.answer.toLowerCase().trim()) {
-              correctAnswers++;
-            }
-          }
-        } else {
-          // Pour QCM et Vrai/Faux
-          if (userAnswer === question.answer) {
+  quizData.subthemes.forEach((subtheme, subIndex) => {
+    subtheme.questions.forEach((question, qIndex) => {
+      totalQuestions++;
+      const answerKey = `${subIndex}-${qIndex}`;
+      const userAnswer = result.answers[answerKey];
+      
+      if (question.type === 'agree_disagree') {
+        // Pour agree_disagree, on compte comme répondu si "agree" ou "disagree"
+        if (userAnswer === 'agree' || userAnswer === 'disagree') {
+          correctAnswers++; // Toute réponse = 1 point (pas de bonne/mauvaise réponse)
+        }
+      } else if (question.type === 'open') {
+        if (question.answer && userAnswer) {
+          if (userAnswer.toLowerCase().trim() === question.answer.toLowerCase().trim()) {
             correctAnswers++;
           }
         }
-      });
+      } else {
+        // QCM et Vrai/Faux
+        if (userAnswer === question.answer) {
+          correctAnswers++;
+        }
+      }
     });
+  });
 
-    return totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
-  };
+  return totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+};
 
   // Trouver le résultat de l'utilisateur actuel
   const myResult = results.find(r => r.participantName === participantName);
