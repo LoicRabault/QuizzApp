@@ -4,42 +4,41 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { db } from '../../services/firebase';
 
 const PRIMARY = "#6C63FF";
-const SUCCESS = "#28A745";
+const SUCCESS = "#10B981";
 const DANGER = "#EF4444";
 const SURFACE = "#FFFFFF";
 const CARD = "#F5F7FB";
 const BORDER = "#E6E8EF";
 const TEXT_MUTED = "#6B7280";
+const TEXT = "#1F2937";
 
 export default function ParticipateQuizScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  
   const { quizId, participantName } = params;
-  
-  // États
+
   const [quiz, setQuiz] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentSubthemeIndex, setCurrentSubthemeIndex] = useState(0);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [showFinishModal, setShowFinishModal] = useState(false);
-  
-  // Charger le quiz
+
+  // --- Charger le quiz ---
   useEffect(() => {
     loadQuiz();
   }, [quizId]);
@@ -62,34 +61,28 @@ export default function ParticipateQuizScreen() {
     }
   };
 
-  // Calculer les totaux
+  // --- Données actuelles ---
   const currentSubtheme = quiz?.subthemes?.[currentSubthemeIndex];
   const currentQuestion = currentSubtheme?.questions?.[currentQuestionIndex];
   const totalQuestions = quiz?.subthemes?.reduce((acc, s) => acc + s.questions.length, 0) || 0;
-  
-  // Position globale de la question actuelle
+
+  // Numéro global de la question
   let globalQuestionNumber = 0;
   for (let i = 0; i < currentSubthemeIndex; i++) {
     globalQuestionNumber += quiz.subthemes[i].questions.length;
   }
   globalQuestionNumber += currentQuestionIndex + 1;
 
-  // Clé unique pour la question actuelle
   const currentAnswerKey = `${currentSubthemeIndex}-${currentQuestionIndex}`;
   const currentAnswer = answers[currentAnswerKey] || '';
 
-  // Sauvegarder une réponse
   const saveAnswer = (value) => {
-    setAnswers(prev => ({
-      ...prev,
-      [currentAnswerKey]: value
-    }));
+    setAnswers((prev) => ({ ...prev, [currentAnswerKey]: value }));
   };
 
-  // Navigation
+  // --- Navigation ---
   const goToNextQuestion = () => {
     const questionsInSubtheme = currentSubtheme.questions.length;
-    
     if (currentQuestionIndex < questionsInSubtheme - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
     } else if (currentSubthemeIndex < quiz.subthemes.length - 1) {
@@ -105,47 +98,33 @@ export default function ParticipateQuizScreen() {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
     } else if (currentSubthemeIndex > 0) {
       setCurrentSubthemeIndex(currentSubthemeIndex - 1);
-      const prevSubtheme = quiz.subthemes[currentSubthemeIndex - 1];
-      setCurrentQuestionIndex(prevSubtheme.questions.length - 1);
+      const prevSub = quiz.subthemes[currentSubthemeIndex - 1];
+      setCurrentQuestionIndex(prevSub.questions.length - 1);
     }
   };
 
-  const handleFinishQuiz = () => {
-    console.log('🎯 Ouverture du modal de confirmation');
-    setShowFinishModal(true);
-  };
+  const handleFinishQuiz = () => setShowFinishModal(true);
 
   const submitQuiz = async () => {
     try {
-      console.log('📤 Début de submitQuiz');
-
       const resultRef = await addDoc(collection(db, 'quizzes', quizId, 'results'), {
-        participantName: participantName,
-        answers: answers,
-        isFinished: true,
+        participantName,
+        answers,
         completedAt: serverTimestamp(),
-        totalQuestions: totalQuestions,
-        answeredCount: Object.keys(answers).filter(key => answers[key]?.toString().trim()).length,
+        totalQuestions,
+        answeredCount: Object.keys(answers).filter(k => answers[k]?.toString().trim()).length,
       });
-
-      console.log('✅ Résultat sauvegardé avec ID:', resultRef.id);
 
       router.replace({
         pathname: '/quizz/waiting',
-        params: {
-          quizId: quizId,
-          participantName: participantName,
-          resultId: resultRef.id
-        }
+        params: { quizId, participantName, resultId: resultRef.id },
       });
-      
     } catch (error) {
-      console.error('💥 Erreur soumission:', error);
-      alert('Impossible d\'enregistrer tes réponses: ' + error.message);
+      alert("Erreur d'enregistrement : " + error.message);
     }
   };
 
-  // Boutons en fonction du type de question
+  // --- Rendu des types de question ---
   const renderQuestionInput = () => {
     if (!currentQuestion) return null;
 
@@ -154,41 +133,39 @@ export default function ParticipateQuizScreen() {
         return (
           <View style={styles.answersContainer}>
             <TouchableOpacity
-              style={[
-                styles.tfButton,
-                currentAnswer === 'true' && styles.tfButtonSelected
-              ]}
+              style={[styles.tfButton, currentAnswer === 'true' && styles.tfButtonSelected]}
               onPress={() => saveAnswer('true')}
             >
-              <Ionicons 
-                name={currentAnswer === 'true' ? 'checkmark-circle' : 'ellipse-outline'} 
-                size={24} 
-                color={currentAnswer === 'true' ? SUCCESS : TEXT_MUTED} 
+              <Ionicons
+                name="checkmark-circle"
+                size={26}
+                color={currentAnswer === 'true' ? SUCCESS : TEXT_MUTED}
               />
-              <Text style={[
-                styles.tfButtonText,
-                currentAnswer === 'true' && styles.tfButtonTextSelected
-              ]}>
+              <Text
+                style={[
+                  styles.tfButtonText,
+                  currentAnswer === 'true' && styles.tfButtonTextSelected,
+                ]}
+              >
                 Vrai
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[
-                styles.tfButton,
-                currentAnswer === 'false' && styles.tfButtonSelected
-              ]}
+              style={[styles.tfButton, currentAnswer === 'false' && styles.tfButtonSelected]}
               onPress={() => saveAnswer('false')}
             >
-              <Ionicons 
-                name={currentAnswer === 'false' ? 'close-circle' : 'ellipse-outline'} 
-                size={24} 
-                color={currentAnswer === 'false' ? DANGER : TEXT_MUTED} 
+              <Ionicons
+                name="close-circle"
+                size={26}
+                color={currentAnswer === 'false' ? DANGER : TEXT_MUTED}
               />
-              <Text style={[
-                styles.tfButtonText,
-                currentAnswer === 'false' && styles.tfButtonTextSelected
-              ]}>
+              <Text
+                style={[
+                  styles.tfButtonText,
+                  currentAnswer === 'false' && styles.tfButtonTextSelected,
+                ]}
+              >
                 Faux
               </Text>
             </TouchableOpacity>
@@ -203,21 +180,25 @@ export default function ParticipateQuizScreen() {
                 key={index}
                 style={[
                   styles.optionButton,
-                  currentAnswer === option && styles.optionButtonSelected
+                  currentAnswer === option && styles.optionButtonSelected,
                 ]}
                 onPress={() => saveAnswer(option)}
               >
-                <View style={styles.optionRadio}>
-                  <Ionicons 
-                    name={currentAnswer === option ? 'radio-button-on' : 'radio-button-off'} 
-                    size={24} 
-                    color={currentAnswer === option ? PRIMARY : TEXT_MUTED} 
-                  />
-                </View>
-                <Text style={[
-                  styles.optionText,
-                  currentAnswer === option && styles.optionTextSelected
-                ]}>
+                <Ionicons
+                  name={
+                    currentAnswer === option
+                      ? 'radio-button-on'
+                      : 'radio-button-off'
+                  }
+                  size={24}
+                  color={currentAnswer === option ? PRIMARY : TEXT_MUTED}
+                />
+                <Text
+                  style={[
+                    styles.optionText,
+                    currentAnswer === option && styles.optionTextSelected,
+                  ]}
+                >
                   {option}
                 </Text>
               </TouchableOpacity>
@@ -227,16 +208,65 @@ export default function ParticipateQuizScreen() {
 
       case 'open':
         return (
-          <View style={styles.answersContainer}>
-            <TextInput
-              style={styles.openInput}
-              placeholder="Ta réponse..."
-              value={currentAnswer}
-              onChangeText={saveAnswer}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
+          <TextInput
+            style={styles.openInput}
+            placeholder="Ta réponse..."
+            placeholderTextColor={TEXT_MUTED}
+            value={currentAnswer}
+            onChangeText={saveAnswer}
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+          />
+        );
+
+      // ✅ NOUVEAU TYPE “D’accord / Pas d’accord”
+      case 'agree_disagree':
+        return (
+          <View style={styles.agreeContainer}>
+            <TouchableOpacity
+              style={[
+                styles.agreeButton,
+                currentAnswer === '1' && styles.agreeSelected,
+              ]}
+              onPress={() => saveAnswer('1')}
+            >
+              <Ionicons
+                name="thumbs-up"
+                size={28}
+                color={currentAnswer === '1' ? '#fff' : SUCCESS}
+              />
+              <Text
+                style={[
+                  styles.agreeText,
+                  currentAnswer === '1' && styles.agreeTextSelected,
+                ]}
+              >
+                D’accord
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.agreeButton,
+                currentAnswer === '0' && styles.disagreeSelected,
+              ]}
+              onPress={() => saveAnswer('0')}
+            >
+              <Ionicons
+                name="thumbs-down"
+                size={28}
+                color={currentAnswer === '0' ? '#fff' : DANGER}
+              />
+              <Text
+                style={[
+                  styles.agreeText,
+                  currentAnswer === '0' && styles.agreeTextSelected,
+                ]}
+              >
+                Pas d’accord
+              </Text>
+            </TouchableOpacity>
           </View>
         );
 
@@ -263,32 +293,29 @@ export default function ParticipateQuizScreen() {
     );
   }
 
-  const isFirstQuestion = currentSubthemeIndex === 0 && currentQuestionIndex === 0;
-  const isLastQuestion = 
-    currentSubthemeIndex === quiz.subthemes.length - 1 && 
+  const isFirst = currentSubthemeIndex === 0 && currentQuestionIndex === 0;
+  const isLast =
+    currentSubthemeIndex === quiz.subthemes.length - 1 &&
     currentQuestionIndex === currentSubtheme.questions.length - 1;
-
-  const answeredCount = Object.keys(answers).filter(key => answers[key]?.toString().trim()).length;
+  const answeredCount = Object.keys(answers).filter(k => answers[k]).length;
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* Header avec progression */}
+      {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.closeButton}
             onPress={() => {
-              if (confirm('Quitter le quiz ? Ta progression sera perdue.')) {
-                router.back();
-              }
+              if (confirm('Quitter le quiz ?')) router.back();
             }}
           >
-            <Ionicons name="close" size={24} color="#333" />
+            <Ionicons name="close" size={24} color={TEXT} />
           </TouchableOpacity>
-          
+
           <View style={styles.participantBadge}>
             <Ionicons name="person" size={14} color={PRIMARY} />
             <Text style={styles.participantName}>{participantName}</Text>
@@ -300,312 +327,207 @@ export default function ParticipateQuizScreen() {
             Question {globalQuestionNumber} / {totalQuestions}
           </Text>
           <View style={styles.progressBar}>
-            <View 
+            <View
               style={[
-                styles.progressFill, 
-                { width: `${(globalQuestionNumber / totalQuestions) * 100}%` }
-              ]} 
+                styles.progressFill,
+                { width: `${(globalQuestionNumber / totalQuestions) * 100}%` },
+              ]}
             />
           </View>
         </View>
-
-        <View style={styles.subthemeBadge}>
-          <Ionicons name="folder-outline" size={16} color={PRIMARY} />
-          <Text style={styles.subthemeText}>{currentSubtheme.name}</Text>
-        </View>
       </View>
 
-      {/* Corps de la question */}
-      <ScrollView 
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-      >
+      {/* CORPS */}
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.questionCard}>
-          <View style={styles.questionHeader}>
-            <View style={styles.questionNumberBadge}>
-              <Text style={styles.questionNumberText}>
-                Q{currentQuestionIndex + 1}
-              </Text>
-            </View>
-            <View style={styles.typeBadge}>
-              <Text style={styles.typeBadgeText}>
-                {currentQuestion.type === 'true_false' && '✓ Vrai/Faux'}
-                {currentQuestion.type === 'multiple_choice' && '☰ QCM'}
-                {currentQuestion.type === 'open' && '✎ Réponse libre'}
-              </Text>
-            </View>
-          </View>
-
           <Text style={styles.questionText}>{currentQuestion.question}</Text>
         </View>
 
         {renderQuestionInput()}
       </ScrollView>
 
-      {/* Footer avec navigation */}
+      {/* FOOTER */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[
-            styles.navButton,
-            styles.prevButton,
-            isFirstQuestion && styles.navButtonDisabled
-          ]}
+          style={[styles.navButton, styles.prevButton, isFirst && styles.disabled]}
           onPress={goToPreviousQuestion}
-          disabled={isFirstQuestion}
+          disabled={isFirst}
         >
-          <Ionicons 
-            name="chevron-back" 
-            size={20} 
-            color={isFirstQuestion ? TEXT_MUTED : PRIMARY} 
-          />
-          <Text style={[
-            styles.navButtonText,
-            isFirstQuestion && styles.navButtonTextDisabled
-          ]}>
-            Précédent
-          </Text>
+          <Ionicons name="chevron-back" size={22} color={isFirst ? TEXT_MUTED : PRIMARY} />
+          <Text style={[styles.navText, isFirst && styles.navDisabledText]}>Précédent</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[
-            styles.navButton,
-            styles.nextButton,
-            isLastQuestion && styles.finishButton
-          ]}
-          onPress={isLastQuestion ? handleFinishQuiz : goToNextQuestion}
+          style={[styles.navButton, styles.nextButton, isLast && styles.finishButton]}
+          onPress={isLast ? handleFinishQuiz : goToNextQuestion}
         >
-          <Text style={styles.nextButtonText}>
-            {isLastQuestion ? 'Terminer' : 'Suivant'}
-          </Text>
-          <Ionicons 
-            name={isLastQuestion ? 'checkmark' : 'chevron-forward'} 
-            size={20} 
-            color="#fff" 
-          />
+          <Text style={styles.nextText}>{isLast ? 'Terminer' : 'Suivant'}</Text>
+          <Ionicons name={isLast ? 'checkmark' : 'chevron-forward'} size={22} color="#fff" />
         </TouchableOpacity>
       </View>
 
-      {/* Modal de confirmation */}
-      <Modal
-        visible={showFinishModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowFinishModal(false)}
-      >
+      {/* MODAL FIN */}
+      <Modal visible={showFinishModal} transparent animationType="fade">
         <View style={modalStyles.overlay}>
           <View style={modalStyles.modal}>
-            <Ionicons name="help-circle-outline" size={48} color={PRIMARY} />
-            
+            <Ionicons name="help-circle-outline" size={50} color={PRIMARY} />
             <Text style={modalStyles.title}>Terminer le quiz ?</Text>
             <Text style={modalStyles.message}>
               Tu as répondu à {answeredCount}/{totalQuestions} questions.
-              {'\n\n'}
-              Veux-tu vraiment terminer ?
             </Text>
 
             <View style={modalStyles.buttons}>
               <TouchableOpacity
                 style={modalStyles.cancelButton}
-                onPress={() => {
-                  console.log('❌ Utilisateur a annulé');
-                  setShowFinishModal(false);
-                }}
+                onPress={() => setShowFinishModal(false)}
               >
-                <Text style={modalStyles.cancelButtonText}>Continuer</Text>
+                <Text style={modalStyles.cancelText}>Continuer</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={modalStyles.confirmButton}
                 onPress={() => {
-                  console.log('✅ Utilisateur a confirmé');
                   setShowFinishModal(false);
                   submitQuiz();
                 }}
               >
-                <Text style={modalStyles.confirmButtonText}>Terminer</Text>
+                <Text style={modalStyles.confirmText}>Terminer</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F2F4F8',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F2F4F8',
-    padding: 20,
-  },
-  loadingText: {
-    marginTop: 12,
-    color: TEXT_MUTED,
-    fontSize: 16,
-  },
-  errorText: {
-    marginTop: 12,
-    color: TEXT_MUTED,
-    fontSize: 16,
-    textAlign: 'center',
-  },
-
-  // Header
+  container: { flex: 1, backgroundColor: '#F2F4F8' },
+  centerContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadingText: { marginTop: 12, color: TEXT_MUTED },
   header: {
     backgroundColor: SURFACE,
     paddingTop: 50,
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
   },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  closeButton: {
-    padding: 8,
-  },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  closeButton: { padding: 8 },
   participantBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     backgroundColor: CARD,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
+    gap: 6,
   },
-  participantName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: PRIMARY,
-  },
-  progressSection: {
-    marginBottom: 12,
-  },
-  progressText: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-    marginBottom: 6,
-  },
+  participantName: { fontSize: 14, fontWeight: '600', color: PRIMARY },
+  progressSection: { marginTop: 12 },
+  progressText: { fontSize: 13, color: TEXT_MUTED, marginBottom: 6 },
   progressBar: {
     height: 6,
     backgroundColor: CARD,
     borderRadius: 3,
     overflow: 'hidden',
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: PRIMARY,
-    borderRadius: 3,
-  },
-  subthemeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    alignSelf: 'flex-start',
-    backgroundColor: `${PRIMARY}15`,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  subthemeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: PRIMARY,
-  },
-
-  // Content
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 20,
-  },
+  progressFill: { height: '100%', backgroundColor: PRIMARY, borderRadius: 3 },
+  content: { flex: 1 },
+  contentContainer: { padding: 20 },
   questionCard: {
     backgroundColor: SURFACE,
     borderRadius: 16,
     padding: 20,
-    marginBottom: 20,
     borderWidth: 1,
     borderColor: BORDER,
+    marginBottom: 20,
   },
-  questionHeader: {
+  questionText: { fontSize: 18, fontWeight: '600', color: TEXT, lineHeight: 26 },
+  answersContainer: { gap: 14 },
+
+  // ✅ D'accord / Pas d'accord
+  agreeContainer: {
+    flexDirection: 'column',
+    gap: 14,
+    marginTop: 6,
+  },
+  agreeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  questionNumberBadge: {
-    backgroundColor: PRIMARY,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  questionNumberText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  typeBadge: {
-    backgroundColor: CARD,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  typeBadgeText: {
-    fontSize: 12,
-    color: TEXT_MUTED,
-    fontWeight: '600',
-  },
-  questionText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    lineHeight: 26,
-  },
-
-  // Answers
-  answersContainer: {
-    gap: 12,
-  },
-
-  // True/False
-  tfButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderRadius: 14,
+    paddingVertical: 18,
     backgroundColor: SURFACE,
     borderWidth: 2,
     borderColor: BORDER,
-    borderRadius: 12,
+    gap: 12,
+  },
+  agreeSelected: { backgroundColor: SUCCESS, borderColor: SUCCESS },
+  disagreeSelected: { backgroundColor: DANGER, borderColor: DANGER },
+  agreeText: { fontSize: 18, fontWeight: '600', color: TEXT },
+  agreeTextSelected: { color: '#fff' },
+
+  // Footer
+  footer: {
+    flexDirection: 'row',
+    backgroundColor: SURFACE,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
     padding: 16,
+    gap: 12,
+  },
+  navButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    paddingVertical: 14,
+  },
+  prevButton: {
+    backgroundColor: CARD,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  nextButton: { backgroundColor: PRIMARY },
+  finishButton: { backgroundColor: SUCCESS },
+  disabled: { opacity: 0.4 },
+  navText: { fontSize: 16, fontWeight: '600', color: PRIMARY },
+  navDisabledText: { color: TEXT_MUTED },
+  nextText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  // Input libre
+  openInput: {
+    backgroundColor: SURFACE,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: BORDER,
+    padding: 16,
+    fontSize: 16,
+    color: TEXT,
+    minHeight: 120,
+  },
+
+  // True/False et QCM
+  tfButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    padding: 18,
+    borderWidth: 2,
+    borderColor: BORDER,
+    backgroundColor: SURFACE,
+    justifyContent: 'center',
     gap: 12,
   },
   tfButtonSelected: {
     borderColor: PRIMARY,
-    backgroundColor: `${PRIMARY}08`,
+    backgroundColor: `${PRIMARY}10`,
   },
-  tfButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  tfButtonTextSelected: {
-    color: PRIMARY,
-  },
-
-  // Multiple choice
+  tfButtonText: { fontSize: 17, fontWeight: '600', color: TEXT },
+  tfButtonTextSelected: { color: PRIMARY },
   optionButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -618,142 +540,52 @@ const styles = StyleSheet.create({
   },
   optionButtonSelected: {
     borderColor: PRIMARY,
-    backgroundColor: `${PRIMARY}08`,
+    backgroundColor: `${PRIMARY}10`,
   },
-  optionRadio: {
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  optionText: {
-    flex: 1,
-    fontSize: 16,
-    color: '#1F2937',
-  },
-  optionTextSelected: {
-    fontWeight: '600',
-    color: PRIMARY,
-  },
-
-  // Open answer
-  openInput: {
-    backgroundColor: SURFACE,
-    borderWidth: 2,
-    borderColor: BORDER,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: '#1F2937',
-    minHeight: 120,
-  },
-
-  // Footer
-  footer: {
-    flexDirection: 'row',
-    backgroundColor: SURFACE,
-    padding: 16,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
-  navButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  prevButton: {
-    backgroundColor: CARD,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  navButtonDisabled: {
-    opacity: 0.4,
-  },
-  navButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: PRIMARY,
-  },
-  navButtonTextDisabled: {
-    color: TEXT_MUTED,
-  },
-  nextButton: {
-    backgroundColor: PRIMARY,
-  },
-  finishButton: {
-    backgroundColor: SUCCESS,
-  },
-  nextButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
+  optionText: { fontSize: 16, color: TEXT },
+  optionTextSelected: { fontWeight: '600', color: PRIMARY },
 });
 
 const modalStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   modal: {
     backgroundColor: SURFACE,
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 24,
     width: '100%',
     maxWidth: 400,
     alignItems: 'center',
   },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginTop: 16,
-    marginBottom: 8,
-  },
+  title: { fontSize: 20, fontWeight: '700', color: TEXT, marginVertical: 10 },
   message: {
+    textAlign: 'center',
     fontSize: 16,
     color: TEXT_MUTED,
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  buttons: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
+  buttons: { flexDirection: 'row', gap: 12, width: '100%' },
   cancelButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: CARD,
     borderWidth: 1,
     borderColor: BORDER,
+    backgroundColor: CARD,
+    borderRadius: 12,
+    paddingVertical: 12,
     alignItems: 'center',
   },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: PRIMARY,
-  },
+  cancelText: { fontWeight: '600', color: PRIMARY },
   confirmButton: {
     flex: 1,
-    paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: DANGER,
+    backgroundColor: SUCCESS,
+    paddingVertical: 12,
     alignItems: 'center',
   },
-  confirmButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
+  confirmText: { color: '#fff', fontWeight: '700' },
 });

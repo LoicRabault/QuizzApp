@@ -45,7 +45,7 @@ export default function QuizFormScreen() {
   ]);
   const [expandedSubtheme, setExpandedSubtheme] = useState(0);
 
-  // 🆕 état des erreurs structurées
+  // erreurs structurées
   const [errors, setErrors] = useState(null);
 
   // --------- Pré-remplissage si édition ---------
@@ -103,8 +103,7 @@ export default function QuizFormScreen() {
       return;
     }
     setSubthemes((prev) => prev.filter((_, i) => i !== idx));
-    setErrors(null); // reset erreurs pour éviter des indices obsolètes
-    // réajuste l'onglet ouvert
+    setErrors(null);
     setExpandedSubtheme((cur) => {
       if (cur === idx) return Math.max(0, idx - 1);
       if (cur > idx) return cur - 1;
@@ -134,14 +133,21 @@ export default function QuizFormScreen() {
       const copy = [...prev];
       if (key === "type") {
         copy[subIndex].questions[qIndex].type = value;
-        copy[subIndex].questions[qIndex].answer = "";
+        // Réinitialise selon type
         if (value === "multiple_choice") {
           const opts = copy[subIndex].questions[qIndex].options || [];
-          if (opts.length < 2) {
-            copy[subIndex].questions[qIndex].options = ["", ""];
-          }
+          if (opts.length < 2) copy[subIndex].questions[qIndex].options = ["", ""];
+          copy[subIndex].questions[qIndex].answer = "";
         } else if (value === "true_false") {
           copy[subIndex].questions[qIndex].options = [];
+          copy[subIndex].questions[qIndex].answer = "";
+        } else if (value === "open") {
+          copy[subIndex].questions[qIndex].options = [];
+          // answer optionnelle
+        } else if (value === "agree_disagree") {
+          // Aucun choix à définir dans l'éditeur
+          copy[subIndex].questions[qIndex].options = [];
+          copy[subIndex].questions[qIndex].answer = "";
         }
         return copy;
       }
@@ -194,7 +200,7 @@ export default function QuizFormScreen() {
     setSubthemes((prev) => {
       const copy = [...prev];
       const q = copy[subIndex].questions[qIndex];
-      if ((q.options || []).length <= 2) return copy; // garde min 2
+      if ((q.options || []).length <= 2) return copy; // min 2 pour QCM
       q.options = q.options.filter((_, i) => i !== optIndex);
       if (!q.options.includes(q.answer)) q.answer = "";
       return copy;
@@ -214,12 +220,7 @@ export default function QuizFormScreen() {
       hasAny = true;
     }
 
-    const visibleSubs = subthemes.map((s) => ({
-      ...s,
-      _visible: s.name.trim() || (s.questions?.length || 0) > 0,
-    }));
-
-    visibleSubs.forEach((s, si) => {
+    subthemes.forEach((s, si) => {
       const sErr = { name: null, questions: [] };
       const hasQuestions = (s.questions?.length || 0) > 0;
 
@@ -228,16 +229,15 @@ export default function QuizFormScreen() {
         hasAny = true;
       }
       if (!hasQuestions) {
-        // message porté au niveau du header du sous-thème
         sErr.name = sErr.name || "Ajoutez au moins une question.";
         hasAny = true;
       }
 
-      (s.questions || []).forEach((q, qi) => {
+      (s.questions || []).forEach((q) => {
         const qErr = {
           question: null,
           answerMissing: false,
-          optionsMissing: [], // indices d'options vides pour QCM
+          optionsMissing: [],
         };
 
         if (!q.question?.trim()) {
@@ -246,19 +246,18 @@ export default function QuizFormScreen() {
         }
 
         if (q.type === "multiple_choice") {
-          const opts = (q.options || []);
+          const opts = q.options || [];
           const filledIdx = opts
             .map((o, i) => (o?.trim() ? i : null))
             .filter((x) => x !== null);
 
-          // marquer les options vides si on n'a pas 2 options valides
           if (filledIdx.length < 2) {
             opts.forEach((o, i) => {
               if (!o?.trim()) qErr.optionsMissing.push(i);
             });
             hasAny = true;
           }
-          const hasAnswer = q.answer && opts.includes(q.answer);
+          const hasAnswer = !!q.answer && opts.includes(q.answer);
           if (!hasAnswer) {
             qErr.answerMissing = true;
             hasAny = true;
@@ -268,6 +267,8 @@ export default function QuizFormScreen() {
             qErr.answerMissing = true;
             hasAny = true;
           }
+        } else if (q.type === "agree_disagree") {
+          // aucune exigence dans l'éditeur
         }
         sErr.questions.push(qErr);
       });
@@ -288,15 +289,17 @@ export default function QuizFormScreen() {
         "Champs manquants",
         "Certains champs sont requis. Ils ont été surlignés en rouge."
       );
-      // Ouvrir le premier sous-thème en erreur si besoin
       const firstErrIndex = err.subthemes.findIndex(
-        (s) => s.name || (s.questions || []).some((q) => q.question || q.answerMissing || (q.optionsMissing||[]).length)
+        (s) =>
+          s.name ||
+          (s.questions || []).some(
+            (q) => q.question || q.answerMissing || (q.optionsMissing || []).length
+          )
       );
       if (firstErrIndex >= 0) setExpandedSubtheme(firstErrIndex);
       return;
     }
 
-    // Nettoyage pour enregistrement
     const cleaned = subthemes
       .filter((s) => s.name.trim() || s.questions.length)
       .map(({ name, questions }) => ({
@@ -304,8 +307,9 @@ export default function QuizFormScreen() {
         questions: questions.map((q) => ({
           question: q.question.trim(),
           type: q.type,
-          options: (q.options || []).filter((o) => o.trim()),
-          answer: q.answer,
+          options: (q.type === "multiple_choice" ? (q.options || []).filter((o) => o.trim()) : []),
+          // pour agree_disagree, on NE stocke PAS de "answer"
+          answer: q.type === "agree_disagree" ? "" : q.answer,
         })),
       }));
 
@@ -425,7 +429,10 @@ export default function QuizFormScreen() {
                 setErrors((prev) => {
                   const cp = { ...(prev || {}) };
                   cp.subthemes = [...(cp.subthemes || [])];
-                  cp.subthemes[sIndex] = { ...(cp.subthemes[sIndex] || {}) , name: null };
+                  cp.subthemes[sIndex] = {
+                    ...(cp.subthemes[sIndex] || {}),
+                    name: null,
+                  };
                   return cp;
                 });
               }
@@ -436,7 +443,11 @@ export default function QuizFormScreen() {
                 "Toutes les questions de ce sous-thème seront supprimées.",
                 [
                   { text: "Annuler", style: "cancel" },
-                  { text: "Supprimer", style: "destructive", onPress: () => removeSubtheme(sIndex) },
+                  {
+                    text: "Supprimer",
+                    style: "destructive",
+                    onPress: () => removeSubtheme(sIndex),
+                  },
                 ]
               )
             }
@@ -449,7 +460,6 @@ export default function QuizFormScreen() {
             updateOption={updateOption}
             removeOption={removeOption}
             selectCorrectOption={selectCorrectOption}
-            // 🆕 passage des erreurs
             subErrors={errors?.subthemes?.[sIndex]}
           />
         ))}
@@ -505,7 +515,7 @@ function SubthemeCard({
   updateOption,
   removeOption,
   selectCorrectOption,
-  subErrors, // 🆕 erreurs pour ce sous-thème
+  subErrors, // erreurs pour ce sous-thème
 }) {
   return (
     <View style={subStyles.card}>
@@ -582,7 +592,7 @@ function SubthemeCard({
                 updateOption={updateOption}
                 removeOption={removeOption}
                 selectCorrectOption={selectCorrectOption}
-                qErrors={subErrors?.questions?.[qIndex]} // 🆕 erreurs question
+                qErrors={subErrors?.questions?.[qIndex]}
               />
             ))
           )}
@@ -608,7 +618,7 @@ function QuestionCard({
   updateOption,
   removeOption,
   selectCorrectOption,
-  qErrors, // 🆕 erreurs de la question
+  qErrors, // erreurs de la question
 }) {
   return (
     <View style={qStyles.card}>
@@ -675,6 +685,14 @@ function QuestionCard({
             active={q.type === "open"}
             onPress={() => updateQuestion(sIndex, qIndex, "type", "open")}
           />
+          <TypeButton
+            icon="swap-vertical-outline"
+            label="D/P"
+            active={q.type === "agree_disagree"}
+            onPress={() => {
+              updateQuestion(sIndex, qIndex, "type", "agree_disagree");
+            }}
+          />
         </View>
       </View>
 
@@ -707,16 +725,29 @@ function QuestionCard({
             const optErr =
               (qErrors?.optionsMissing || []).includes(optIndex) &&
               (!opt || !opt.trim());
+
+            const isSelected =
+              !!q.answer && q.answer === opt && !!(opt?.trim());
+
             return (
               <View key={optIndex} style={qStyles.optionRow}>
                 <TouchableOpacity
                   style={qStyles.checkbox}
-                  onPress={() => selectCorrectOption(sIndex, qIndex, opt)}
+                  onPress={() => {
+                    if (!opt?.trim()) {
+                      Alert.alert(
+                        "Option vide",
+                        "Remplis l'option avant de la sélectionner."
+                      );
+                      return;
+                    }
+                    selectCorrectOption(sIndex, qIndex, opt);
+                  }}
                 >
                   <Ionicons
-                    name={q.answer === opt ? "checkmark-circle" : "ellipse-outline"}
+                    name={isSelected ? "checkmark-circle" : "ellipse-outline"}
                     size={24}
-                    color={q.answer === opt ? SUCCESS : "#CBD5E1"}
+                    color={isSelected ? SUCCESS : "#CBD5E1"}
                   />
                 </TouchableOpacity>
                 <TextInput
@@ -727,7 +758,9 @@ function QuestionCard({
                   placeholder={`Option ${optIndex + 1}`}
                   placeholderTextColor="#94A3B8"
                   value={opt}
-                  onChangeText={(text) => updateOption(sIndex, qIndex, optIndex, text)}
+                  onChangeText={(text) =>
+                    updateOption(sIndex, qIndex, optIndex, text)
+                  }
                 />
                 {q.options?.length > 2 && (
                   <TouchableOpacity
@@ -771,6 +804,27 @@ function QuestionCard({
             onChangeText={(text) => updateQuestion(sIndex, qIndex, "answer", text)}
             multiline
           />
+        </View>
+      )}
+
+      {q.type === "agree_disagree" && (
+        <View style={qStyles.answersSection}>
+          <Text style={qStyles.label}>Réponse binaire (sans bonne réponse)</Text>
+          {/* Pas de boutons de sélection ici : la réponse sera donnée par le participant pendant le quiz */}
+          <View
+            style={{
+              backgroundColor: "#ECFDF5",
+              borderColor: "#D1FAE5",
+              borderWidth: 1,
+              borderRadius: 10,
+              padding: 12,
+            }}
+          >
+            <Text style={{ color: "#065F46", fontSize: 13.5 }}>
+              Ce type ne demande aucune “bonne réponse” dans l’éditeur.
+              Le participant choisira “D’accord” (score 1) ou “Pas d’accord” (score 0) lors du quiz.
+            </Text>
+          </View>
         </View>
       )}
     </View>
