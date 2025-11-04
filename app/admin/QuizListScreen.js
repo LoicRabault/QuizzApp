@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
   FlatList,
   Modal,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -17,17 +19,14 @@ export default function QuizListScreen() {
   const router = useRouter();
   const [quizzes, setQuizzes] = useState([]);
   const [filter, setFilter] = useState("");
-  
-  // États pour la modale
   const [modalVisible, setModalVisible] = useState(false);
   const [modalConfig, setModalConfig] = useState({
     title: "",
     message: "",
-    type: "confirm", // "confirm" ou "success" ou "error"
+    type: "confirm",
     onConfirm: null,
   });
 
-  // 🔄 Récupérer les quiz
   const fetchQuizzes = async () => {
     try {
       const snapshot = await getDocs(collection(db, "quizzes"));
@@ -37,22 +36,15 @@ export default function QuizListScreen() {
     }
   };
 
-  // Fonction pour afficher la modale
   const showModal = (title, message, type = "confirm", onConfirm = null) => {
     setModalConfig({ title, message, type, onConfirm });
     setModalVisible(true);
   };
 
-  // 🗑️ Supprimer un quiz
-  const handleDelete = async (id) => {
-    if (!id) {
-      showModal("Erreur", "ID de quiz invalide", "error");
-      return;
-    }
-
+  const handleDelete = (id) => {
     showModal(
-      "Confirmation",
-      "Êtes-vous sûr de vouloir supprimer ce quiz ?",
+      "Supprimer le quiz",
+      "Voulez-vous vraiment supprimer ce quiz ? Cette action est irréversible.",
       "confirm",
       async () => {
         try {
@@ -60,7 +52,6 @@ export default function QuizListScreen() {
           showModal("Succès", "Quiz supprimé avec succès ✅", "success");
           await fetchQuizzes();
         } catch (error) {
-          console.error("Erreur lors de la suppression:", error);
           showModal("Erreur", `Impossible de supprimer: ${error.message}`, "error");
         }
       }
@@ -77,18 +68,31 @@ export default function QuizListScreen() {
 
   return (
     <View style={styles.container}>
-      {/* === Header avec flèche de retour === */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#1e293b" />
+      {/* === HEADER === */}
+      <LinearGradient
+        colors={["#6366f1", "#3b82f6"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.header}
+      >
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Tous les Quiz</Text>
-        <View style={{ width: 24 }} />
-      </View>
+        <View style={{ width: 32 }} />
+      </LinearGradient>
 
-      {/* === Barre de recherche === */}
+      {/* === BARRE DE RECHERCHE === */}
       <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={20} color="#64748b" style={{ marginRight: 6 }} />
+        <Ionicons
+          name="search-outline"
+          size={20}
+          color="#64748b"
+          style={{ marginRight: 8 }}
+        />
         <TextInput
           style={styles.input}
           placeholder="Rechercher un quiz..."
@@ -98,37 +102,42 @@ export default function QuizListScreen() {
         />
       </View>
 
-      {/* === Liste des quiz === */}
+      {/* === LISTE === */}
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: 60 }}
         renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={{ flex: 1 }}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.card,
+              pressed && styles.cardPressed,
+            ]}
+            onPress={() =>
+              router.push({
+                pathname: "/quizz/QuizCreatedScreen",
+                params: {
+                  quizId: item.id,
+                  quizTitle: item.title,
+                },
+              })
+            }
+          >
+            <View style={styles.quizInfo}>
               <Text style={styles.quizTitle}>{item.title}</Text>
-              <Text style={styles.quizSubtitle}>
-                {item.theme || "Thème inconnu"}{" "}
-                {item.subthemes?.length ? `• ${item.subthemes.join(", ")}` : ""}
-              </Text>
+  <Text style={styles.quizSubtitle}>
+  {item.createdAt
+    ? new Date(item.createdAt.seconds * 1000).toLocaleDateString("fr-FR", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "Date inconnue"}
+</Text>
+
+
             </View>
-
             <View style={styles.actions}>
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() =>
-                  router.push({
-                    pathname: "/quizz/QuizCreatedScreen",
-                    params: {
-                      quizId: item.id,
-                      quizTitle: item.title,
-                    },
-                  })
-                }
-              >
-                <Ionicons name="eye-outline" size={22} color="#2563eb" />
-              </TouchableOpacity>
-
               <TouchableOpacity
                 style={styles.iconButton}
                 onPress={() => handleDelete(item.id)}
@@ -136,29 +145,39 @@ export default function QuizListScreen() {
                 <Ionicons name="trash-outline" size={22} color="#ef4444" />
               </TouchableOpacity>
             </View>
-          </View>
+          </Pressable>
         )}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>Aucun quiz pour le moment 🤷‍♂️</Text>
+          <View style={styles.emptyState}>
+            <Ionicons name="document-text-outline" size={48} color="#cbd5e1" />
+            <Text style={styles.emptyTitle}>Aucun quiz trouvé</Text>
+            <Text style={styles.emptyText}>
+              Créez ou importez un quiz pour le voir ici
+            </Text>
+          </View>
         }
       />
 
-      {/* === MODALE PERSONNALISÉE === */}
+      {/* === MODALE === */}
       <Modal
         animationType="fade"
         transparent={true}
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {/* Icône selon le type */}
-            <View style={[
-              styles.modalIcon,
-              modalConfig.type === "success" && styles.modalIconSuccess,
-              modalConfig.type === "error" && styles.modalIconError,
-              modalConfig.type === "confirm" && styles.modalIconConfirm,
-            ]}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setModalVisible(false)}
+        >
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <View
+              style={[
+                styles.modalIcon,
+                modalConfig.type === "success" && { backgroundColor: "#22c55e" },
+                modalConfig.type === "error" && { backgroundColor: "#ef4444" },
+                modalConfig.type === "confirm" && { backgroundColor: "#f97316" },
+              ]}
+            >
               <Ionicons
                 name={
                   modalConfig.type === "success"
@@ -171,42 +190,39 @@ export default function QuizListScreen() {
                 color="#fff"
               />
             </View>
-
             <Text style={styles.modalTitle}>{modalConfig.title}</Text>
             <Text style={styles.modalMessage}>{modalConfig.message}</Text>
 
             <View style={styles.modalButtons}>
               {modalConfig.type === "confirm" ? (
                 <>
-                  <TouchableOpacity
+                  <Pressable
                     style={[styles.modalButton, styles.modalButtonCancel]}
                     onPress={() => setModalVisible(false)}
                   >
                     <Text style={styles.modalButtonTextCancel}>Annuler</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
+                  </Pressable>
+                  <Pressable
                     style={[styles.modalButton, styles.modalButtonConfirm]}
                     onPress={() => {
                       setModalVisible(false);
-                      if (modalConfig.onConfirm) {
-                        modalConfig.onConfirm();
-                      }
+                      modalConfig.onConfirm && modalConfig.onConfirm();
                     }}
                   >
                     <Text style={styles.modalButtonTextConfirm}>Supprimer</Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 </>
               ) : (
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonSingle]}
+                <Pressable
+                  style={[styles.modalButton, styles.modalButtonConfirm]}
                   onPress={() => setModalVisible(false)}
                 >
                   <Text style={styles.modalButtonTextConfirm}>OK</Text>
-                </TouchableOpacity>
+                </Pressable>
               )}
             </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -215,98 +231,110 @@ export default function QuizListScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
 
-  // === HEADER ===
+  // HEADER
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#fff",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 24,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    elevation: 5,
   },
   backButton: {
-    padding: 6,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    padding: 8,
+    borderRadius: 12,
+    marginBottom: 24
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1e293b",
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#fff",
+    letterSpacing: -0.5,
   },
 
-  // === RECHERCHE ===
+  // SEARCH
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
-    margin: 16,
-    borderRadius: 12,
+    marginHorizontal: 20,
+    marginTop: -20,
+    marginBottom: 20,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-  },
-  input: {
-    flex: 1,
-    color: "#0f172a",
-    fontSize: 15,
-  },
-
-  // === CARTES ===
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 16,
-    marginHorizontal: 16,
-    marginVertical: 6,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.07,
+    shadowOpacity: 0.06,
     shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  quizTitle: { fontSize: 17, fontWeight: "600", color: "#0f172a" },
-  quizSubtitle: { color: "#64748b", fontSize: 13, marginTop: 2 },
-  actions: { flexDirection: "row", alignItems: "center", gap: 12 },
-  iconButton: { padding: 4 },
+  input: { flex: 1, fontSize: 15, color: "#0f172a" },
 
-  // === ÉTATS ===
-  emptyText: {
-    textAlign: "center",
-    color: "#94a3b8",
-    marginTop: 40,
-    fontSize: 15,
+  // CARD
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    marginHorizontal: 20,
+    marginVertical: 8,
+    padding: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  cardPressed: {
+    transform: [{ scale: 0.98 }],
+    shadowOpacity: 0.15,
+  },
+  quizInfo: { flex: 1, marginRight: 10 },
+  quizTitle: { fontSize: 17, fontWeight: "700", color: "#0f172a" },
+  quizSubtitle: { fontSize: 13, color: "#64748b", marginTop: 4 },
+  actions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  iconButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: "#fee2e2",
   },
 
-  // === MODALE ===
+  // EMPTY
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 80,
+    paddingHorizontal: 24,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#475569",
+    marginTop: 16,
+  },
+  emptyText: { color: "#94a3b8", fontSize: 14, marginTop: 6 },
+
+  // MODAL
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
     alignItems: "center",
   },
   modalContent: {
     backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 24,
+    padding: 28,
     width: "90%",
-    maxWidth: 400,
+    maxWidth: 380,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
+    elevation: 8,
   },
   modalIcon: {
     width: 80,
@@ -314,20 +342,11 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
-  },
-  modalIconSuccess: {
-    backgroundColor: "#22c55e",
-  },
-  modalIconError: {
-    backgroundColor: "#ef4444",
-  },
-  modalIconConfirm: {
-    backgroundColor: "#f97316",
+    marginBottom: 20,
   },
   modalTitle: {
     fontSize: 22,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#0f172a",
     marginBottom: 8,
     textAlign: "center",
@@ -346,19 +365,12 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: "center",
   },
-  modalButtonCancel: {
-    backgroundColor: "#f1f5f9",
-  },
-  modalButtonConfirm: {
-    backgroundColor: "#ef4444",
-  },
-  modalButtonSingle: {
-    backgroundColor: "#3b82f6",
-  },
+  modalButtonCancel: { backgroundColor: "#f1f5f9" },
+  modalButtonConfirm: { backgroundColor: "#ef4444" },
   modalButtonTextCancel: {
     color: "#64748b",
     fontSize: 16,
@@ -367,6 +379,6 @@ const styles = StyleSheet.create({
   modalButtonTextConfirm: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 });
