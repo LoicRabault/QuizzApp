@@ -2,8 +2,9 @@
 import * as Sharing from 'expo-sharing';
 
 export const generateQuizUrl = (quizId) => {
-  // URL de votre app (à remplacer par votre domaine)
-  const baseUrl = 'http://localhost:8081/join';
+  const baseUrlEnv = process.env.EXPO_PUBLIC_BASE_URL;
+
+  const baseUrl = `${baseUrlEnv}/join`;
   return `${baseUrl}?quizId=${quizId}`;
 };
 

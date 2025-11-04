@@ -17,7 +17,7 @@ const QRCodeDisplay = ({ quizId, quizTitle }) => {
   const getQuizUrl = () => {
     if (typeof window !== 'undefined') {
       // On est sur le web - utiliser l'URL actuelle
-      const baseUrl = window.location.origin; // Ex: http://localhost:8081
+      const baseUrl = window.location.origin;
       return `${baseUrl}/join?quizId=${quizId}`;
     }
     // Fallback pour mobile
@@ -39,8 +39,6 @@ const QRCodeDisplay = ({ quizId, quizTitle }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="checkmark-circle" size={60} color={SUCCESS} />
-        <Text style={styles.successTitle}>Quiz créé avec succès !</Text>
         <Text style={styles.quizTitle}>{quizTitle}</Text>
       </View>
 
@@ -103,7 +101,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quizTitle: {
-    fontSize: 18,
+    fontSize: 50,
     color: TEXT_MUTED,
     textAlign: 'center',
   },
