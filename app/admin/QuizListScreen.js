@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useRouter } from "expo-router";
 import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
-  Alert,
   FlatList,
+  Modal,
   StyleSheet,
   Text,
   TextInput,
@@ -14,9 +14,18 @@ import {
 import { db } from "../../services/firebase";
 
 export default function QuizListScreen() {
-  const navigation = useNavigation();
+  const router = useRouter();
   const [quizzes, setQuizzes] = useState([]);
   const [filter, setFilter] = useState("");
+  
+  // États pour la modale
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalConfig, setModalConfig] = useState({
+    title: "",
+    message: "",
+    type: "confirm", // "confirm" ou "success" ou "error"
+    onConfirm: null,
+  });
 
   // 🔄 Récupérer les quiz
   const fetchQuizzes = async () => {
@@ -24,23 +33,38 @@ export default function QuizListScreen() {
       const snapshot = await getDocs(collection(db, "quizzes"));
       setQuizzes(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
     } catch (error) {
-      Alert.alert("Erreur", "Impossible de charger les quiz.");
+      showModal("Erreur", "Impossible de charger les quiz.", "error");
     }
+  };
+
+  // Fonction pour afficher la modale
+  const showModal = (title, message, type = "confirm", onConfirm = null) => {
+    setModalConfig({ title, message, type, onConfirm });
+    setModalVisible(true);
   };
 
   // 🗑️ Supprimer un quiz
   const handleDelete = async (id) => {
-    Alert.alert("Confirmation", "Supprimer ce quiz ?", [
-      { text: "Annuler", style: "cancel" },
-      {
-        text: "Supprimer",
-        style: "destructive",
-        onPress: async () => {
+    if (!id) {
+      showModal("Erreur", "ID de quiz invalide", "error");
+      return;
+    }
+
+    showModal(
+      "Confirmation",
+      "Êtes-vous sûr de vouloir supprimer ce quiz ?",
+      "confirm",
+      async () => {
+        try {
           await deleteDoc(doc(db, "quizzes", id));
-          fetchQuizzes();
-        },
-      },
-    ]);
+          showModal("Succès", "Quiz supprimé avec succès ✅", "success");
+          await fetchQuizzes();
+        } catch (error) {
+          console.error("Erreur lors de la suppression:", error);
+          showModal("Erreur", `Impossible de supprimer: ${error.message}`, "error");
+        }
+      }
+    );
   };
 
   useEffect(() => {
@@ -55,11 +79,11 @@ export default function QuizListScreen() {
     <View style={styles.container}>
       {/* === Header avec flèche de retour === */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#1e293b" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Tous les Quiz</Text>
-        <View style={{ width: 24 }} /> {/* pour équilibrer */}
+        <View style={{ width: 24 }} />
       </View>
 
       {/* === Barre de recherche === */}
@@ -92,9 +116,17 @@ export default function QuizListScreen() {
             <View style={styles.actions}>
               <TouchableOpacity
                 style={styles.iconButton}
-                onPress={() => navigation.navigate("QuizFormScreen", { quiz: item })}
+                onPress={() =>
+                  router.push({
+                    pathname: "/quizz/QuizCreatedScreen",
+                    params: {
+                      quizId: item.id,
+                      quizTitle: item.title,
+                    },
+                  })
+                }
               >
-                <Ionicons name="create-outline" size={22} color="#2563eb" />
+                <Ionicons name="eye-outline" size={22} color="#2563eb" />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -110,6 +142,72 @@ export default function QuizListScreen() {
           <Text style={styles.emptyText}>Aucun quiz pour le moment 🤷‍♂️</Text>
         }
       />
+
+      {/* === MODALE PERSONNALISÉE === */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Icône selon le type */}
+            <View style={[
+              styles.modalIcon,
+              modalConfig.type === "success" && styles.modalIconSuccess,
+              modalConfig.type === "error" && styles.modalIconError,
+              modalConfig.type === "confirm" && styles.modalIconConfirm,
+            ]}>
+              <Ionicons
+                name={
+                  modalConfig.type === "success"
+                    ? "checkmark-circle"
+                    : modalConfig.type === "error"
+                    ? "alert-circle"
+                    : "help-circle"
+                }
+                size={48}
+                color="#fff"
+              />
+            </View>
+
+            <Text style={styles.modalTitle}>{modalConfig.title}</Text>
+            <Text style={styles.modalMessage}>{modalConfig.message}</Text>
+
+            <View style={styles.modalButtons}>
+              {modalConfig.type === "confirm" ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.modalButtonCancel]}
+                    onPress={() => setModalVisible(false)}
+                  >
+                    <Text style={styles.modalButtonTextCancel}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.modalButtonConfirm]}
+                    onPress={() => {
+                      setModalVisible(false);
+                      if (modalConfig.onConfirm) {
+                        modalConfig.onConfirm();
+                      }
+                    }}
+                  >
+                    <Text style={styles.modalButtonTextConfirm}>Supprimer</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonSingle]}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.modalButtonTextConfirm}>OK</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -188,5 +286,87 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
     marginTop: 40,
     fontSize: 15,
+  },
+
+  // === MODALE ===
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 24,
+    width: "90%",
+    maxWidth: 400,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  modalIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalIconSuccess: {
+    backgroundColor: "#22c55e",
+  },
+  modalIconError: {
+    backgroundColor: "#ef4444",
+  },
+  modalIconConfirm: {
+    backgroundColor: "#f97316",
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  modalMessage: {
+    fontSize: 15,
+    color: "#64748b",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  modalButtonCancel: {
+    backgroundColor: "#f1f5f9",
+  },
+  modalButtonConfirm: {
+    backgroundColor: "#ef4444",
+  },
+  modalButtonSingle: {
+    backgroundColor: "#3b82f6",
+  },
+  modalButtonTextCancel: {
+    color: "#64748b",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalButtonTextConfirm: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
