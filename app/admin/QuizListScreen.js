@@ -1,8 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  addDoc,
+  serverTimestamp,
+  getDoc,
+  getCountFromServer,
+  writeBatch,              // 🆕
+} from "firebase/firestore";
+import { useEffect, useState, useCallback } from "react";
 import {
   FlatList,
   Modal,
@@ -12,6 +22,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
 import { db } from "../../services/firebase";
 
@@ -26,21 +37,46 @@ export default function QuizListScreen() {
     type: "confirm",
     onConfirm: null,
   });
-
-  const fetchQuizzes = async () => {
-    try {
-      const snapshot = await getDocs(collection(db, "quizzes"));
-      setQuizzes(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    } catch (error) {
-      showModal("Erreur", "Impossible de charger les quiz.", "error");
-    }
-  };
+  const [duplicateModal, setDuplicateModal] = useState({
+    visible: false,
+    quizId: null,
+    newTitle: "",
+  });
 
   const showModal = (title, message, type = "confirm", onConfirm = null) => {
     setModalConfig({ title, message, type, onConfirm });
     setModalVisible(true);
   };
 
+  // === Charger les quiz + compter les participants depuis /results ===
+  const fetchQuizzes = useCallback(async () => {
+    try {
+      const snapshot = await getDocs(collection(db, "quizzes"));
+      const quizzesWithCount = await Promise.all(
+        snapshot.docs.map(async (docSnap) => {
+          const data = docSnap.data() || {};
+          let participantsCount = 0;
+          try {
+            const countSnap = await getCountFromServer(
+              collection(db, "quizzes", docSnap.id, "results")
+            );
+            participantsCount = countSnap.data().count || 0;
+          } catch {
+            participantsCount = 0;
+          }
+          return { id: docSnap.id, ...data, participantsCount };
+        })
+      );
+      setQuizzes(quizzesWithCount);
+    } catch (error) {
+      showModal("Erreur", "Impossible de charger les quiz.", "error");
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { fetchQuizzes(); }, [fetchQuizzes]));
+  useEffect(() => { fetchQuizzes(); }, [fetchQuizzes]);
+
+  // === Supprimer un quiz ===
   const handleDelete = (id) => {
     showModal(
       "Supprimer le quiz",
@@ -58,12 +94,59 @@ export default function QuizListScreen() {
     );
   };
 
-  useEffect(() => {
-    fetchQuizzes();
-  }, []);
+  // === 🆕 Vider les participants (supprime tous les docs de /results) ===
+  const handleClearParticipants = (quizId) => {
+    showModal(
+      "Réinitialiser les participants",
+      "Supprimer tous les participants et leurs résultats pour ce quiz ?",
+      "confirm",
+      async () => {
+        try {
+          const resultsCol = collection(db, "quizzes", quizId, "results");
+          const resultsSnap = await getDocs(resultsCol);
+          if (resultsSnap.empty) {
+            showModal("Info", "Aucun participant à supprimer.", "success");
+            return;
+          }
+          const batch = writeBatch(db);
+          resultsSnap.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+
+          showModal("Succès", "Tous les participants ont été supprimés ✅", "success");
+          await fetchQuizzes(); // met à jour le compteur
+        } catch (e) {
+          showModal("Erreur", `Impossible de supprimer les participants : ${e.message}`, "error");
+        }
+      }
+    );
+  };
+
+  // === Dupliquer un quiz (copie doc & subthemes, sans results) ===
+  const handleDuplicate = async (quizId, newTitle) => {
+    try {
+      const quizRef = doc(db, "quizzes", quizId);
+      const quizSnap = await getDoc(quizRef);
+      if (!quizSnap.exists()) throw new Error("Quiz introuvable");
+
+      const original = quizSnap.data() || {};
+      const { createdAt, participantsCount, ...rest } = original;
+
+      await addDoc(collection(db, "quizzes"), {
+        ...rest,
+        title: newTitle,
+        createdAt: serverTimestamp(),
+      });
+
+      showModal("Succès", "Quiz dupliqué avec succès ✅", "success");
+      setDuplicateModal({ visible: false, quizId: null, newTitle: "" });
+      await fetchQuizzes();
+    } catch (error) {
+      showModal("Erreur", `Impossible de dupliquer: ${error.message}`, "error");
+    }
+  };
 
   const filtered = quizzes.filter((q) =>
-    q.title.toLowerCase().includes(filter.toLowerCase())
+    (q.title || "").toLowerCase().includes(filter.toLowerCase())
   );
 
   return (
@@ -75,24 +158,16 @@ export default function QuizListScreen() {
         end={{ x: 1, y: 0 }}
         style={styles.header}
       >
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Tous les Quiz</Text>
         <View style={{ width: 32 }} />
       </LinearGradient>
 
-      {/* === BARRE DE RECHERCHE === */}
+      {/* === RECHERCHE === */}
       <View style={styles.searchContainer}>
-        <Ionicons
-          name="search-outline"
-          size={20}
-          color="#64748b"
-          style={{ marginRight: 8 }}
-        />
+        <Ionicons name="search-outline" size={20} color="#64748b" style={{ marginRight: 8 }} />
         <TextInput
           style={styles.input}
           placeholder="Rechercher un quiz..."
@@ -109,40 +184,68 @@ export default function QuizListScreen() {
         contentContainerStyle={{ paddingBottom: 60 }}
         renderItem={({ item }) => (
           <Pressable
-            style={({ pressed }) => [
-              styles.card,
-              pressed && styles.cardPressed,
-            ]}
+            style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
             onPress={() =>
               router.push({
                 pathname: "/quizz/QuizCreatedScreen",
-                params: {
-                  quizId: item.id,
-                  quizTitle: item.title,
-                },
+                params: { quizId: item.id, quizTitle: item.title },
               })
             }
           >
             <View style={styles.quizInfo}>
               <Text style={styles.quizTitle}>{item.title}</Text>
-  <Text style={styles.quizSubtitle}>
-  {item.createdAt
-    ? new Date(item.createdAt.seconds * 1000).toLocaleDateString("fr-FR", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
-    : "Date inconnue"}
-</Text>
-
-
+              <Text style={styles.quizSubtitle}>
+                {item.createdAt && item.createdAt.seconds
+                  ? new Date(item.createdAt.seconds * 1000).toLocaleDateString("fr-FR", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : "Date inconnue"}
+              </Text>
+              <Text style={styles.quizParticipants}>
+                👥 {item.participantsCount ?? 0} participant(s)
+              </Text>
             </View>
+
             <View style={styles.actions}>
+              {/* 🆕 Vider participants */}
               <TouchableOpacity
-                style={styles.iconButton}
+                style={[styles.iconButton, { backgroundColor: "#fef6e0ff" }]}
+                onPress={() => handleClearParticipants(item.id)}
+              >
+                <Ionicons name="people-outline" size={20} color="#c74402ff" />
+              </TouchableOpacity>
+
+              {/* Modifier */}
+              <TouchableOpacity
+                style={[styles.iconButton, { backgroundColor: "#dbeafe" }]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/admin/QuizFormScreen",
+                    params: { quizId: item.id },
+                  })
+                }
+              >
+                <Ionicons name="create-outline" size={20} color="#2563eb" />
+              </TouchableOpacity>
+
+              {/* Dupliquer */}
+              <TouchableOpacity
+                style={[styles.iconButton, { backgroundColor: "#fef3c7" }]}
+                onPress={() =>
+                  setDuplicateModal({ visible: true, quizId: item.id, newTitle: "" })
+                }
+              >
+                <Ionicons name="copy-outline" size={20} color="#f59e0b" />
+              </TouchableOpacity>
+
+              {/* Supprimer quiz */}
+              <TouchableOpacity
+                style={[styles.iconButton, { backgroundColor: "#fee2e2" }]}
                 onPress={() => handleDelete(item.id)}
               >
-                <Ionicons name="trash-outline" size={22} color="#ef4444" />
+                <Ionicons name="trash-outline" size={20} color="#ef4444" />
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -158,17 +261,14 @@ export default function QuizListScreen() {
         }
       />
 
-      {/* === MODALE === */}
+      {/* === MODALE CONFIRMATION / SUCCÈS === */}
       <Modal
         animationType="fade"
         transparent={true}
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setModalVisible(false)}
-        >
+        <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
           <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
             <View
               style={[
@@ -209,7 +309,7 @@ export default function QuizListScreen() {
                       modalConfig.onConfirm && modalConfig.onConfirm();
                     }}
                   >
-                    <Text style={styles.modalButtonTextConfirm}>Supprimer</Text>
+                    <Text style={styles.modalButtonTextConfirm}>Confirmer</Text>
                   </Pressable>
                 </>
               ) : (
@@ -224,14 +324,64 @@ export default function QuizListScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* === MODALE DUPLICATION === */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={duplicateModal.visible}
+        onRequestClose={() =>
+          setDuplicateModal({ visible: false, quizId: null, newTitle: "" })
+        }
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() =>
+            setDuplicateModal({ visible: false, quizId: null, newTitle: "" })
+          }
+        >
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Dupliquer le quiz</Text>
+            <Text style={styles.modalMessage}>Saisissez le nouveau thème :</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Nouveau thème du quiz..."
+              value={duplicateModal.newTitle}
+              onChangeText={(text) =>
+                setDuplicateModal((prev) => ({ ...prev, newTitle: text }))
+              }
+            />
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() =>
+                  setDuplicateModal({ visible: false, quizId: null, newTitle: "" })
+                }
+              >
+                <Text style={styles.modalButtonTextCancel}>Annuler</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonConfirm]}
+                onPress={() => {
+                  if (!duplicateModal.newTitle.trim()) {
+                    Alert.alert("Erreur", "Veuillez saisir un titre.");
+                    return;
+                  }
+                  handleDuplicate(duplicateModal.quizId, duplicateModal.newTitle);
+                }}
+              >
+                <Text style={styles.modalButtonTextConfirm}>Dupliquer</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
-
-  // HEADER
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -247,16 +397,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.2)",
     padding: 8,
     borderRadius: 12,
-    marginBottom: 24
+    marginBottom: 24,
   },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: "900",
-    color: "#fff",
-    letterSpacing: -0.5,
-  },
-
-  // SEARCH
+  headerTitle: { fontSize: 26, fontWeight: "900", color: "#fff", letterSpacing: -0.5 },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -275,8 +418,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   input: { flex: 1, fontSize: 15, color: "#0f172a" },
-
-  // CARD
   card: {
     flexDirection: "row",
     alignItems: "center",
@@ -291,36 +432,21 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  cardPressed: {
-    transform: [{ scale: 0.98 }],
-    shadowOpacity: 0.15,
-  },
+  cardPressed: { transform: [{ scale: 0.98 }], shadowOpacity: 0.15 },
   quizInfo: { flex: 1, marginRight: 10 },
   quizTitle: { fontSize: 17, fontWeight: "700", color: "#0f172a" },
   quizSubtitle: { fontSize: 13, color: "#64748b", marginTop: 4 },
+  quizParticipants: { fontSize: 13, color: "#475569", marginTop: 4 },
   actions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  iconButton: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: "#fee2e2",
-  },
-
-  // EMPTY
+  iconButton: { padding: 6, borderRadius: 8 },
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
     marginTop: 80,
     paddingHorizontal: 24,
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#475569",
-    marginTop: 16,
-  },
+  emptyTitle: { fontSize: 18, fontWeight: "700", color: "#475569", marginTop: 16 },
   emptyText: { color: "#94a3b8", fontSize: 14, marginTop: 6 },
-
-  // MODAL
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -344,41 +470,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#0f172a",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  modalMessage: {
-    fontSize: 15,
-    color: "#64748b",
-    textAlign: "center",
-    marginBottom: 24,
-    lineHeight: 22,
-  },
-  modalButtons: {
-    flexDirection: "row",
-    gap: 12,
-    width: "100%",
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  modalButtonCancel: { backgroundColor: "#f1f5f9" },
-  modalButtonConfirm: { backgroundColor: "#ef4444" },
-  modalButtonTextCancel: {
-    color: "#64748b",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  modalButtonTextConfirm: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  modalTitle: { fontSize: 22, fontWeight: "800", color: "#0f172a", marginBottom: 8, textAlign: "center" },
+  modalMessage: { fontSize: 15, color: "#64748b", textAlign: "center", marginBottom: 24, lineHeight: 22 },
+  modalButtons: { flexDirection: "row", gap: 12, width: "100%" },
+  modalButton: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: "center" },
+  modalButtonCancel: { backgroundColor: "#f1f5v9".replace("v","9") },
+  modalButtonConfirm: { backgroundColor: "#2563eb" },
+  modalButtonTextCancel: { color: "#64748b", fontSize: 16, fontWeight: "600" },
+  modalButtonTextConfirm: { color: "#fff", fontSize: 16, fontWeight: "700" },
 });
