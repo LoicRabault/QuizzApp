@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { db } from '../services/firebase';
+import { db } from '../../services/firebase';
 
 const PRIMARY = "#6C63FF";
 const SUCCESS = "#28A745";
@@ -26,7 +26,7 @@ export default function JoinQuizScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   
-  const { quizId } = params;
+  const { quizId } = useLocalSearchParams();
   
   const [participantName, setParticipantName] = useState('');
   const [quiz, setQuiz] = useState(null);

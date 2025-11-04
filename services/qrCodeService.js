@@ -1,11 +1,9 @@
 // src/services/qrCodeService.js
 import * as Sharing from 'expo-sharing';
-
 export const generateQuizUrl = (quizId) => {
   const baseUrlEnv = process.env.EXPO_PUBLIC_BASE_URL;
 
-  const baseUrl = `${baseUrlEnv}/join`;
-  return `${baseUrl}?quizId=${quizId}`;
+  return `${baseUrlEnv}/join/${quizId}`;
 };
 
 export const generateDeepLink = (quizId) => {

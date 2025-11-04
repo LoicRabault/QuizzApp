@@ -14,15 +14,14 @@ const TEXT_MUTED = "#6B7280";
 
 const QRCodeDisplay = ({ quizId, quizTitle }) => {
   // ⭐ CORRECTION ICI - Utiliser l'URL actuelle du navigateur
-  const getQuizUrl = () => {
-    if (typeof window !== 'undefined') {
-      // On est sur le web - utiliser l'URL actuelle
-      const baseUrl = window.location.origin;
-      return `${baseUrl}/join?quizId=${quizId}`;
-    }
-    // Fallback pour mobile
-    return `exp://192.168.1.1:8081/--/join?quizId=${quizId}`;
-  };
+const getQuizUrl = () => {
+  if (typeof window !== 'undefined') {
+ 
+    return `${window.location.origin}/join/${quizId}`;
+  }
+  const baseUrl = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:8081';
+  return `${baseUrl}/join/${quizId}`;
+};
 
   const quizUrl = getQuizUrl();
 
