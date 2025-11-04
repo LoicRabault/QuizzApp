@@ -1,49 +1,70 @@
-// src/components/QRCodeDisplay.js
+// app/components/qrCode/QRCodeDisplay.js
+import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { generateQuizUrl, shareQuizUrl } from '../services/qrCodeService';
+
+
+const PRIMARY = "#6C63FF";
+const SUCCESS = "#28A745";
+const SURFACE = "#FFFFFF";
+const CARD = "#F5F7FB";
+const BORDER = "#E6E8EF";
+const TEXT_MUTED = "#6B7280";
 
 const QRCodeDisplay = ({ quizId, quizTitle }) => {
-  const quizUrl = generateQuizUrl(quizId);
+  // Générer l'URL du quiz - ADAPTER SELON VOTRE DOMAINE
+  const quizUrl = `https://localhost:8081/join?quizId=${quizId}`;
+  // Pour tester en local avec Expo: exp://192.168.x.x:8081/--/join?quizId=${quizId}
 
   const copyToClipboard = async () => {
     await Clipboard.setStringAsync(quizUrl);
-    Alert.alert('Copié !', 'Le lien a été copié dans le presse-papier');
-  };
-
-  const handleShare = async () => {
-    await shareQuizUrl(quizId, quizTitle);
+    Alert.alert('✅ Copié !', 'Le lien a été copié dans le presse-papier');
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Scannez pour rejoindre</Text>
-      
-      <View style={styles.qrContainer}>
-        <QRCode
-          value={quizUrl}
-          size={250}
-          backgroundColor="white"
-          color="black"
-        />
+      <View style={styles.header}>
+        <Ionicons name="checkmark-circle" size={60} color={SUCCESS} />
+        <Text style={styles.successTitle}>Quiz créé avec succès !</Text>
+        <Text style={styles.quizTitle}>{quizTitle}</Text>
       </View>
 
-      <View style={styles.urlContainer}>
-        <Text style={styles.urlLabel}>Ou utilisez ce lien :</Text>
-        <Text style={styles.url} numberOfLines={1}>
-          {quizUrl}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Scannez pour rejoindre</Text>
+        <Text style={styles.sectionSubtitle}>
+          Les participants peuvent scanner ce QR code
         </Text>
+        
+        <View style={styles.qrContainer}>
+          <QRCode
+            value={quizUrl}
+            size={220}
+            backgroundColor="white"
+            color={PRIMARY}
+          />
+        </View>
       </View>
 
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={copyToClipboard}>
-          <Text style={styles.buttonText}>📋 Copier le lien</Text>
-        </TouchableOpacity>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Ou partagez ce lien</Text>
+        <View style={styles.urlContainer}>
+          <Text style={styles.url} numberOfLines={1} ellipsizeMode="middle">
+            {quizUrl}
+          </Text>
+        </View>
 
-        <TouchableOpacity style={styles.button} onPress={handleShare}>
-          <Text style={styles.buttonText}>📤 Partager</Text>
+        <TouchableOpacity style={styles.copyButton} onPress={copyToClipboard}>
+          <Ionicons name="copy-outline" size={20} color="#fff" />
+          <Text style={styles.copyButtonText}>Copier le lien</Text>
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.infoBox}>
+        <Ionicons name="information-circle-outline" size={20} color={PRIMARY} />
+        <Text style={styles.infoText}>
+          Les participants pourront rejoindre le quiz en utilisant ce lien ou en scannant le QR code
+        </Text>
       </View>
     </View>
   );
@@ -51,58 +72,98 @@ const QRCodeDisplay = ({ quizId, quizTitle }) => {
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
+    flex: 1,
+    backgroundColor: '#F2F4F8',
     padding: 20,
   },
-  title: {
+  header: {
+    alignItems: 'center',
+    marginBottom: 30,
+    marginTop: 20,
+  },
+  successTitle: {
     fontSize: 24,
     fontWeight: 'bold',
+    color: SUCCESS,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  quizTitle: {
+    fontSize: 18,
+    color: TEXT_MUTED,
+    textAlign: 'center',
+  },
+  section: {
+    backgroundColor: SURFACE,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: 'center',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: TEXT_MUTED,
     marginBottom: 20,
   },
   qrContainer: {
     padding: 20,
     backgroundColor: 'white',
-    borderRadius: 10,
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   urlContainer: {
-    marginTop: 30,
-    alignItems: 'center',
+    backgroundColor: CARD,
+    padding: 12,
+    borderRadius: 8,
     width: '100%',
-  },
-  urlLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
+    marginBottom: 16,
   },
   url: {
     fontSize: 12,
-    color: '#007AFF',
-    backgroundColor: '#F0F0F0',
-    padding: 10,
-    borderRadius: 5,
-    width: '100%',
+    color: PRIMARY,
     textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
-  buttonContainer: {
+  copyButton: {
+    backgroundColor: PRIMARY,
     flexDirection: 'row',
-    marginTop: 30,
-    gap: 15,
-  },
-  button: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 20,
+    alignItems: 'center',
     paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 8,
   },
-  buttonText: {
-    color: 'white',
+  copyButtonText: {
+    color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  infoBox: {
+    backgroundColor: '#F1EFFF',
+    borderWidth: 1,
+    borderColor: PRIMARY,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 14,
+    color: TEXT_MUTED,
+    lineHeight: 20,
   },
 });
 

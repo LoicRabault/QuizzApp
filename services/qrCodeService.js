@@ -9,7 +9,7 @@ export const generateQuizUrl = (quizId) => {
 
 export const generateDeepLink = (quizId) => {
   // Deep link pour ouvrir directement l'app
-  return `yourapp://join?quizId=${quizId}`;
+  return `myquizapp://join?quizId=${quizId}`;
 };
 
 export const shareQuizUrl = async (quizId, quizTitle) => {

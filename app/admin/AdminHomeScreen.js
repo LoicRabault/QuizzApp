@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, ScrollView, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
-import { auth, db } from "../services/firebase";
-import { collection, query, orderBy, limit, getDocs } from "firebase/firestore";
+import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import { Alert, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { auth, db } from "../../services/firebase";
 
 export default function AdminHomeScreen() {
   const router = useRouter();

@@ -1,17 +1,17 @@
-import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  StyleSheet,
-  Alert,
-} from "react-native";
-import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
-import { db } from "../services/firebase";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { db } from "../../services/firebase";
 
 export default function QuizListScreen() {
   const navigation = useNavigation();

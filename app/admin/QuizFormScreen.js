@@ -1,19 +1,20 @@
 // app/admin/QuizFormScreen.js
-import React, { useMemo, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router"; // ⭐ AJOUT ICI
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { useMemo, useState } from "react";
 import {
-  View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
-  Alert,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
+  View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db } from "../services/firebase"; // garde ton chemin actuel si ça marche
+import { auth, db } from "../../services/firebase"; // garde ton chemin actuel si ça marche
 
 const PRIMARY = "#6C63FF";
 const SUCCESS = "#28A745";
@@ -24,6 +25,7 @@ const BORDER = "#E6E8EF";
 const TEXT_MUTED = "#6B7280";
 
 export default function QuizFormScreen() {
+  const router = useRouter(); // ⭐ AJOUT ICI
   const [title, setTitle] = useState("");
   const [subthemes, setSubthemes] = useState([{ name: "", open: true, questions: [] }]);
 
@@ -132,11 +134,11 @@ export default function QuizFormScreen() {
     if (visibleSubs.length === 0) return "Ajoute au moins un sous-thème avec une question.";
     for (let i = 0; i < visibleSubs.length; i++) {
       const s = visibleSubs[i];
-      if (!s.name.trim()) return `Le sous-thème ${i + 1} n’a pas de nom.`;
-      if (s.questions.length === 0) return `Le sous-thème “${s.name}” n’a pas de question.`;
+      if (!s.name.trim()) return `Le sous-thème ${i + 1} n'a pas de nom.`;
+      if (s.questions.length === 0) return `Le sous-thème "${s.name}" n'a pas de question.`;
       for (let j = 0; j < s.questions.length; j++) {
         const q = s.questions[j];
-        if (!q.question.trim()) return `Question ${j + 1} de “${s.name}” : texte manquant.`;
+        if (!q.question.trim()) return `Question ${j + 1} de "${s.name}" : texte manquant.`;
         if (q.type === "multiple_choice") {
           const opts = (q.options || []).filter((o) => o.trim());
           if (opts.length < 2) return `QCM ( ${s.name} / Q${j + 1} ) : mets au moins 2 options.`;
@@ -151,37 +153,69 @@ export default function QuizFormScreen() {
     return null;
   };
 
-  const saveQuiz = async () => {
-    const err = validate();
-    if (err) return Alert.alert("Petit rappel", err);
+  // ⭐ FONCTION MODIFIÉE
+const saveQuiz = async () => {
+  console.log('📍 saveQuiz appelée'); // Log 1
+  
+  const err = validate();
+  if (err) {
+    console.log('❌ Validation échouée:', err);
+    return Alert.alert("Petit rappel", err);
+  }
+  
+  console.log('✅ Validation OK'); // Log 2
 
-    // Nettoyage (on ne sauve pas la clé "open")
-    const cleaned = subthemes
-      .filter((s) => s.name.trim() || s.questions.length > 0)
-      .map(({ name, questions }) => ({
-        name: name.trim(),
-        questions: questions.map((q) => ({
-          question: q.question.trim(),
-          type: q.type,
-          options: (q.options || []).filter((o) => o.trim()),
-          answer: q.answer, // "true"/"false" / option string / texte libre
-        })),
-      }));
+  // ⭐ IMPORTANT : Définir 'cleaned' AVANT le try/catch
+  const cleaned = subthemes
+    .filter((s) => s.name.trim() || s.questions.length > 0)
+    .map(({ name, questions }) => ({
+      name: name.trim(),
+      questions: questions.map((q) => ({
+        question: q.question.trim(),
+        type: q.type,
+        options: (q.options || []).filter((o) => o.trim()),
+        answer: q.answer, // "true"/"false" / option string / texte libre
+      })),
+    }));
 
-    try {
-      await addDoc(collection(db, "quizzes"), {
-        creatorId: auth.currentUser?.uid || null,
-        title: title.trim(),
-        subthemes: cleaned,
-        createdAt: serverTimestamp(),
-      });
-      Alert.alert("✅ Quiz enregistré !");
-      setTitle("");
-      setSubthemes([{ name: "", open: true, questions: [] }]);
-    } catch (error) {
-      Alert.alert("Erreur", error?.message || "Impossible d’enregistrer.");
-    }
-  };
+  console.log('📦 Données nettoyées:', cleaned); // Log 3
+  
+  try {
+    console.log('🔥 Tentative addDoc...'); // Log 4
+    
+    // Ajouter le quiz à Firestore
+    const docRef = await addDoc(collection(db, "quizzes"), {
+      creatorId: auth.currentUser?.uid || null,
+      title: title.trim(),
+      subthemes: cleaned,
+      createdAt: serverTimestamp(),
+    });
+    
+    console.log('✅ Quiz sauvegardé avec ID:', docRef.id); // Log 5
+    console.log('🧭 Router disponible?', !!router); // Log 6
+
+    // ⭐ REDIRECTION - Vérifiez que le chemin correspond à votre structure
+    // Si votre dossier s'appelle "quiz" (1 z), utilisez '/quiz/QuizCreatedScreen'
+    // Si votre dossier s'appelle "quizz" (2 z), utilisez '/quizz/QuizCreatedScreen'
+    router.push({
+      pathname: '/quizz/QuizCreatedScreen',  // Ajustez selon votre structure
+      params: {
+        quizId: docRef.id,
+        quizTitle: title.trim()
+      }
+    });
+
+    console.log('✨ Navigation déclenchée vers QuizCreatedScreen'); // Log 7
+
+    // Réinitialiser le formulaire
+    setTitle("");
+    setSubthemes([{ name: "", open: true, questions: [] }]);
+    
+  } catch (error) {
+    console.error('💥 Erreur complète:', error);
+    Alert.alert("Erreur", error?.message || "Impossible d'enregistrer.");
+  }
+};
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -459,6 +493,7 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
     marginBottom: 10,
   },
+  muted: { color: TEXT_MUTED, fontSize: 12, marginBottom: 6 },
 
   subthemeCard: {
     backgroundColor: SURFACE,
