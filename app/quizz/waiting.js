@@ -332,13 +332,7 @@ export default function WaitingScreen() {
 
       {/* Footer avec actions */}
       <View style={styles.footer}>
-        <TouchableOpacity 
-          style={styles.secondaryButton}
-          onPress={handleBackToQuiz}
-        >
-          <Ionicons name="arrow-back-outline" size={20} color={PRIMARY} />
-          <Text style={styles.secondaryButtonText}>Modifier mes réponses</Text>
-        </TouchableOpacity>
+        
 
         {allFinished && (
           <TouchableOpacity 
