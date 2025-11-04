@@ -4,9 +4,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   addDoc,
   collection,
-  serverTimestamp,
   doc,
   getDoc,
+  serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
@@ -355,47 +355,54 @@ export default function QuizFormScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* Header fixe avec progression */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.headerTitle}>
-              {isEdit ? "Modifier un quiz" : "Créer un quiz"}
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              {isEdit
-                ? "Mettez à jour le thème et les questions"
-                : "Remplissez les informations ci-dessous"}
-            </Text>
-          </View>
-          <View style={styles.stats}>
-            <StatBadge icon="layers-outline" value={subthemes.length} label="thèmes" />
-            <StatBadge icon="help-circle-outline" value={totalQuestions} label="questions" />
-          </View>
-        </View>
+     {/* Header fixe avec progression */}
+<View style={styles.header}>
+  <View style={styles.headerTop}>
+    {/* Bouton retour */}
+    <TouchableOpacity 
+      style={styles.backButton}
+      onPress={() => router.back()}
+    >
+      <Ionicons name="arrow-back" size={24} color={TEXT} />
+    </TouchableOpacity>
 
+    <View style={styles.headerContent}>
+      <Text style={styles.headerTitle}>
+        {isEdit ? "Modifier un quiz" : "Créer un quiz"}
+      </Text>
+      <Text style={styles.headerSubtitle}>
+        {isEdit
+          ? "Mettez à jour le thème et les questions"
+          : "Remplissez les informations ci-dessous"}
+      </Text>
+    </View>
+    
+    <View style={styles.stats}>
+      <StatBadge icon="layers-outline" value={subthemes.length} label="thèmes" />
+      <StatBadge icon="help-circle-outline" value={totalQuestions} label="questions" />
+    </View>
+  </View>
         {/* Titre du quiz */}
-        <View style={styles.titleSection}>
-          <Text style={styles.sectionLabel}>Titre du quiz</Text>
-          <TextInput
-            style={[
-              styles.titleInput,
-              errors?.title && styles.inputError,
-            ]}
-            placeholder="Ex : Physique Médicale, Histoire de France..."
-            placeholderTextColor="#94A3B8"
-            value={title}
-            onChangeText={(t) => {
-              setTitle(t);
-              if (errors?.title && t.trim()) {
-                setErrors((prev) => ({ ...prev, title: null }));
-              }
-            }}
-          />
-          {errors?.title && <Text style={styles.errorText}>{errors.title}</Text>}
-        </View>
-      </View>
-
+  <View style={styles.titleSection}>
+    <Text style={styles.sectionLabel}>Titre du quiz</Text>
+    <TextInput
+      style={[
+        styles.titleInput,
+        errors?.title && styles.inputError,
+      ]}
+      placeholder="Ex : Physique Médicale, Histoire de France..."
+      placeholderTextColor="#94A3B8"
+      value={title}
+      onChangeText={(t) => {
+        setTitle(t);
+        if (errors?.title && t.trim()) {
+          setErrors((prev) => ({ ...prev, title: null }));
+        }
+      }}
+    />
+    {errors?.title && <Text style={styles.errorText}>{errors.title}</Text>}
+  </View>
+</View>
       {/* Liste des sous-thèmes */}
       <ScrollView
         style={styles.scrollView}
@@ -813,6 +820,19 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  backButton: {
+    padding: 8,
+    marginRight: 12,
+  },
+  headerContent: {
+    flex: 1,
+  },
+  
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 20,
+  },
   headerTop: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1065,6 +1085,7 @@ const typeStyles = StyleSheet.create({
   text: { fontSize: 13, fontWeight: "600", color: PRIMARY },
   textActive: { color: "#fff" },
 });
+
 
 const tfBtnStyles = StyleSheet.create({
   btn: {
