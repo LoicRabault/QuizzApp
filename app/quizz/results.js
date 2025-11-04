@@ -134,16 +134,17 @@ export default function ResultsScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.closeButton}
-          onPress={() => router.replace('/')}
-        >
-          <Ionicons name="close" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Résultats</Text>
-        <View style={{ width: 40 }} />
-      </View>
+    <View style={styles.header}>
+  <TouchableOpacity 
+    style={styles.closeButton}
+    onPress={() => router.back()}  // 👈 retour à la page précédente
+  >
+    <Ionicons name="arrow-back" size={24} color="#333" /> 
+  </TouchableOpacity>
+  <Text style={styles.headerTitle}>Résultats</Text>
+  <View style={{ width: 40 }} />
+</View>
+
 
       <ScrollView 
         style={styles.content}

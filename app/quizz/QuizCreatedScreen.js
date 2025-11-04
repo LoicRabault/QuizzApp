@@ -1,10 +1,11 @@
-// app/quiz/QuizCreatedScreen.js
+// app/quizz/QuizCreatedScreen.js
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import QRCodeDisplay from '../../components/qrCode/QRCodeDisplay';
 
 const PRIMARY = "#6C63FF";
+const SUCCESS = "#28A745";
 const SURFACE = "#FFFFFF";
 const BORDER = "#E6E8EF";
 
@@ -32,13 +33,21 @@ export default function QuizCreatedScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        {/* 🧪 Bouton de test - pour développement */}
+        {/* Bouton pour voir les résultats */}
         <TouchableOpacity 
-          style={styles.testButton}
-          onPress={() => router.push(`/join?quizId=${quizId}`)}
+          style={styles.resultsButton}
+          onPress={() => {
+            router.push({
+              pathname: '/admin/QuizResultsManagement',
+              params: {
+                quizId: quizId,
+                quizTitle: quizTitle
+              }
+            });
+          }}
         >
-          <Ionicons name="eye-outline" size={18} color="#fff" />
-          <Text style={styles.testButtonText}>Tester la page participant</Text>
+          <Ionicons name="bar-chart-outline" size={18} color="#fff" />
+          <Text style={styles.resultsButtonText}>Voir les résultats et participants</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -81,8 +90,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: BORDER,
   },
-  testButton: {
-    backgroundColor: '#FFA500',
+  resultsButton: {
+    backgroundColor: SUCCESS,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
@@ -91,7 +100,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
-  testButtonText: {
+  resultsButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',

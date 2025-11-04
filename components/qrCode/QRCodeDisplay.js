@@ -13,13 +13,27 @@ const BORDER = "#E6E8EF";
 const TEXT_MUTED = "#6B7280";
 
 const QRCodeDisplay = ({ quizId, quizTitle }) => {
-  // Générer l'URL du quiz - ADAPTER SELON VOTRE DOMAINE
-  const quizUrl = `https://localhost:8081/join?quizId=${quizId}`;
-  // Pour tester en local avec Expo: exp://192.168.x.x:8081/--/join?quizId=${quizId}
+  // ⭐ CORRECTION ICI - Utiliser l'URL actuelle du navigateur
+  const getQuizUrl = () => {
+    if (typeof window !== 'undefined') {
+      // On est sur le web - utiliser l'URL actuelle
+      const baseUrl = window.location.origin; // Ex: http://localhost:8081
+      return `${baseUrl}/join?quizId=${quizId}`;
+    }
+    // Fallback pour mobile
+    return `exp://192.168.1.1:8081/--/join?quizId=${quizId}`;
+  };
+
+  const quizUrl = getQuizUrl();
 
   const copyToClipboard = async () => {
     await Clipboard.setStringAsync(quizUrl);
-    Alert.alert('✅ Copié !', 'Le lien a été copié dans le presse-papier');
+    // ⭐ Remplacer Alert.alert par alert pour le web
+    if (Platform.OS === 'web') {
+      alert('✅ Lien copié !');
+    } else {
+      Alert.alert('✅ Copié !', 'Le lien a été copié dans le presse-papier');
+    }
   };
 
   return (
