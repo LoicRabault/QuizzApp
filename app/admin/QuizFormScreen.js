@@ -32,7 +32,6 @@ const BACKGROUND = "#F8FAFC";
 const BORDER = "#E2E8F0";
 const TEXT = "#1E293B";
 const TEXT_MUTED = "#64748B";
-const ACCENT = "#8B5CF6";
 
 export default function QuizFormScreen() {
   const router = useRouter();
@@ -45,6 +44,9 @@ export default function QuizFormScreen() {
     { name: "", open: true, questions: [] },
   ]);
   const [expandedSubtheme, setExpandedSubtheme] = useState(0);
+
+  // 🆕 état des erreurs structurées
+  const [errors, setErrors] = useState(null);
 
   // --------- Pré-remplissage si édition ---------
   useEffect(() => {
@@ -101,6 +103,7 @@ export default function QuizFormScreen() {
       return;
     }
     setSubthemes((prev) => prev.filter((_, i) => i !== idx));
+    setErrors(null); // reset erreurs pour éviter des indices obsolètes
     // réajuste l'onglet ouvert
     setExpandedSubtheme((cur) => {
       if (cur === idx) return Math.max(0, idx - 1);
@@ -129,7 +132,6 @@ export default function QuizFormScreen() {
   const updateQuestion = (subIndex, qIndex, key, value) => {
     setSubthemes((prev) => {
       const copy = [...prev];
-      // si on change de type, on réinitialise answer et options min pour QCM
       if (key === "type") {
         copy[subIndex].questions[qIndex].type = value;
         copy[subIndex].questions[qIndex].answer = "";
@@ -156,6 +158,7 @@ export default function QuizFormScreen() {
       );
       return copy;
     });
+    setErrors(null);
   };
 
   const duplicateQuestion = (subIndex, qIndex) => {
@@ -201,46 +204,99 @@ export default function QuizFormScreen() {
   const selectCorrectOption = (subIndex, qIndex, value) =>
     updateQuestion(subIndex, qIndex, "answer", value);
 
-  // --------- Validation ---------
-  const validate = () => {
-    if (!title.trim()) return "Donne un nom au quiz 😉";
-    const visibleSubs = subthemes.filter(
-      (s) => s.name.trim() || s.questions.length > 0
-    );
-    if (!visibleSubs.length)
-      return "Ajoute au moins un sous-thème avec une question.";
+  // --------- Validation structurée (renvoie un objet d'erreurs) ---------
+  const buildErrors = () => {
+    const err = { title: null, subthemes: [] };
+    let hasAny = false;
 
-    for (let i = 0; i < visibleSubs.length; i++) {
-      const s = visibleSubs[i];
-      if (!s.name.trim()) return `Le sous-thème ${i + 1} n'a pas de nom.`;
-      if (!s.questions.length)
-        return `Le sous-thème "${s.name}" n'a pas de question.`;
-      for (let j = 0; j < s.questions.length; j++) {
-        const q = s.questions[j];
-        if (!q.question.trim())
-          return `Question ${j + 1} de "${s.name}" : texte manquant.`;
-        if (q.type === "multiple_choice") {
-          const opts = (q.options || []).filter((o) => o.trim());
-          if (opts.length < 2)
-            return `QCM ( ${s.name} / Q${j + 1} ) : mets au moins 2 options.`;
-          if (!opts.includes(q.answer))
-            return `QCM ( ${s.name} / Q${j + 1} ) : sélectionne la bonne réponse.`;
-        }
-        if (
-          q.type === "true_false" &&
-          !["true", "false"].includes(q.answer)
-        )
-          return `Vrai/Faux ( ${s.name} / Q${j + 1} ) : choisis Vrai ou Faux.`;
-      }
+    if (!title.trim()) {
+      err.title = "Le titre du quiz est requis.";
+      hasAny = true;
     }
-    return null;
+
+    const visibleSubs = subthemes.map((s) => ({
+      ...s,
+      _visible: s.name.trim() || (s.questions?.length || 0) > 0,
+    }));
+
+    visibleSubs.forEach((s, si) => {
+      const sErr = { name: null, questions: [] };
+      const hasQuestions = (s.questions?.length || 0) > 0;
+
+      if (!s.name.trim()) {
+        sErr.name = "Nom du sous-thème requis.";
+        hasAny = true;
+      }
+      if (!hasQuestions) {
+        // message porté au niveau du header du sous-thème
+        sErr.name = sErr.name || "Ajoutez au moins une question.";
+        hasAny = true;
+      }
+
+      (s.questions || []).forEach((q, qi) => {
+        const qErr = {
+          question: null,
+          answerMissing: false,
+          optionsMissing: [], // indices d'options vides pour QCM
+        };
+
+        if (!q.question?.trim()) {
+          qErr.question = "Le texte de la question est requis.";
+          hasAny = true;
+        }
+
+        if (q.type === "multiple_choice") {
+          const opts = (q.options || []);
+          const filledIdx = opts
+            .map((o, i) => (o?.trim() ? i : null))
+            .filter((x) => x !== null);
+
+          // marquer les options vides si on n'a pas 2 options valides
+          if (filledIdx.length < 2) {
+            opts.forEach((o, i) => {
+              if (!o?.trim()) qErr.optionsMissing.push(i);
+            });
+            hasAny = true;
+          }
+          const hasAnswer = q.answer && opts.includes(q.answer);
+          if (!hasAnswer) {
+            qErr.answerMissing = true;
+            hasAny = true;
+          }
+        } else if (q.type === "true_false") {
+          if (!["true", "false"].includes(q.answer)) {
+            qErr.answerMissing = true;
+            hasAny = true;
+          }
+        }
+        sErr.questions.push(qErr);
+      });
+
+      err.subthemes.push(sErr);
+    });
+
+    return { err, hasAny };
   };
 
   // --------- Save (create / update) ---------
   const saveQuiz = async () => {
-    const err = validate();
-    if (err) return Alert.alert("Petit rappel", err);
+    const { err, hasAny } = buildErrors();
+    setErrors(err);
 
+    if (hasAny) {
+      Alert.alert(
+        "Champs manquants",
+        "Certains champs sont requis. Ils ont été surlignés en rouge."
+      );
+      // Ouvrir le premier sous-thème en erreur si besoin
+      const firstErrIndex = err.subthemes.findIndex(
+        (s) => s.name || (s.questions || []).some((q) => q.question || q.answerMissing || (q.optionsMissing||[]).length)
+      );
+      if (firstErrIndex >= 0) setExpandedSubtheme(firstErrIndex);
+      return;
+    }
+
+    // Nettoyage pour enregistrement
     const cleaned = subthemes
       .filter((s) => s.name.trim() || s.questions.length)
       .map(({ name, questions }) => ({
@@ -280,6 +336,7 @@ export default function QuizFormScreen() {
       setTitle("");
       setSubthemes([{ name: "", open: true, questions: [] }]);
       setExpandedSubtheme(0);
+      setErrors(null);
     } catch (error) {
       Alert.alert("Erreur", error?.message || "Impossible d'enregistrer.");
     }
@@ -321,12 +378,21 @@ export default function QuizFormScreen() {
         <View style={styles.titleSection}>
           <Text style={styles.sectionLabel}>Titre du quiz</Text>
           <TextInput
-            style={styles.titleInput}
+            style={[
+              styles.titleInput,
+              errors?.title && styles.inputError,
+            ]}
             placeholder="Ex : Physique Médicale, Histoire de France..."
             placeholderTextColor="#94A3B8"
             value={title}
-            onChangeText={setTitle}
+            onChangeText={(t) => {
+              setTitle(t);
+              if (errors?.title && t.trim()) {
+                setErrors((prev) => ({ ...prev, title: null }));
+              }
+            }}
           />
+          {errors?.title && <Text style={styles.errorText}>{errors.title}</Text>}
         </View>
       </View>
 
@@ -346,7 +412,17 @@ export default function QuizFormScreen() {
             sIndex={sIndex}
             isExpanded={expandedSubtheme === sIndex}
             onToggle={() => toggleSubtheme(sIndex)}
-            onUpdateName={(text) => setSub(sIndex, { name: text })}
+            onUpdateName={(text) => {
+              setSub(sIndex, { name: text });
+              if (errors?.subthemes?.[sIndex]?.name && text.trim()) {
+                setErrors((prev) => {
+                  const cp = { ...(prev || {}) };
+                  cp.subthemes = [...(cp.subthemes || [])];
+                  cp.subthemes[sIndex] = { ...(cp.subthemes[sIndex] || {}) , name: null };
+                  return cp;
+                });
+              }
+            }}
             onRemove={() =>
               Alert.alert(
                 "Supprimer ce sous-thème ?",
@@ -366,6 +442,8 @@ export default function QuizFormScreen() {
             updateOption={updateOption}
             removeOption={removeOption}
             selectCorrectOption={selectCorrectOption}
+            // 🆕 passage des erreurs
+            subErrors={errors?.subthemes?.[sIndex]}
           />
         ))}
 
@@ -420,6 +498,7 @@ function SubthemeCard({
   updateOption,
   removeOption,
   selectCorrectOption,
+  subErrors, // 🆕 erreurs pour ce sous-thème
 }) {
   return (
     <View style={subStyles.card}>
@@ -439,13 +518,19 @@ function SubthemeCard({
           </View>
           <View style={subStyles.headerInfo}>
             <TextInput
-              style={subStyles.nameInput}
+              style={[
+                subStyles.nameInput,
+                subErrors?.name && styles.inputError,
+              ]}
               placeholder={`Sous-thème ${sIndex + 1}`}
               placeholderTextColor="#94A3B8"
               value={sub.name}
               onChangeText={onUpdateName}
               onFocus={(e) => e.stopPropagation()}
             />
+            {!!subErrors?.name && (
+              <Text style={styles.errorText}>{subErrors.name}</Text>
+            )}
             <Text style={subStyles.questionCount}>
               {sub.questions.length} question{sub.questions.length > 1 ? "s" : ""}
             </Text>
@@ -490,6 +575,7 @@ function SubthemeCard({
                 updateOption={updateOption}
                 removeOption={removeOption}
                 selectCorrectOption={selectCorrectOption}
+                qErrors={subErrors?.questions?.[qIndex]} // 🆕 erreurs question
               />
             ))
           )}
@@ -515,6 +601,7 @@ function QuestionCard({
   updateOption,
   removeOption,
   selectCorrectOption,
+  qErrors, // 🆕 erreurs de la question
 }) {
   return (
     <View style={qStyles.card}>
@@ -544,13 +631,16 @@ function QuestionCard({
 
       {/* Texte de la question */}
       <TextInput
-        style={qStyles.input}
+        style={[qStyles.input, qErrors?.question && styles.inputError]}
         placeholder="Écrivez votre question ici..."
         placeholderTextColor="#94A3B8"
         value={q.question}
         onChangeText={(text) => updateQuestion(sIndex, qIndex, "question", text)}
         multiline
       />
+      {!!qErrors?.question && (
+        <Text style={styles.errorText}>{qErrors.question}</Text>
+      )}
 
       {/* Type de question */}
       <View style={qStyles.typeSection}>
@@ -597,41 +687,62 @@ function QuestionCard({
               onPress={() => updateQuestion(sIndex, qIndex, "answer", "false")}
             />
           </View>
+          {!!qErrors?.answerMissing && (
+            <Text style={styles.errorText}>Choisissez Vrai ou Faux.</Text>
+          )}
         </View>
       )}
 
       {q.type === "multiple_choice" && (
         <View style={qStyles.answersSection}>
           <Text style={qStyles.label}>Options (cochez la bonne réponse)</Text>
-          {(q.options?.length ? q.options : ["", ""]).map((opt, optIndex) => (
-            <View key={optIndex} style={qStyles.optionRow}>
-              <TouchableOpacity
-                style={qStyles.checkbox}
-                onPress={() => selectCorrectOption(sIndex, qIndex, opt)}
-              >
-                <Ionicons
-                  name={q.answer === opt ? "checkmark-circle" : "ellipse-outline"}
-                  size={24}
-                  color={q.answer === opt ? SUCCESS : "#CBD5E1"}
-                />
-              </TouchableOpacity>
-              <TextInput
-                style={qStyles.optionInput}
-                placeholder={`Option ${optIndex + 1}`}
-                placeholderTextColor="#94A3B8"
-                value={opt}
-                onChangeText={(text) => updateOption(sIndex, qIndex, optIndex, text)}
-              />
-              {q.options?.length > 2 && (
+          {(q.options?.length ? q.options : ["", ""]).map((opt, optIndex) => {
+            const optErr =
+              (qErrors?.optionsMissing || []).includes(optIndex) &&
+              (!opt || !opt.trim());
+            return (
+              <View key={optIndex} style={qStyles.optionRow}>
                 <TouchableOpacity
-                  style={qStyles.removeOption}
-                  onPress={() => removeOption(sIndex, qIndex, optIndex)}
+                  style={qStyles.checkbox}
+                  onPress={() => selectCorrectOption(sIndex, qIndex, opt)}
                 >
-                  <Ionicons name="close-circle" size={20} color="#CBD5E1" />
+                  <Ionicons
+                    name={q.answer === opt ? "checkmark-circle" : "ellipse-outline"}
+                    size={24}
+                    color={q.answer === opt ? SUCCESS : "#CBD5E1"}
+                  />
                 </TouchableOpacity>
-              )}
-            </View>
-          ))}
+                <TextInput
+                  style={[
+                    qStyles.optionInput,
+                    optErr && styles.inputError,
+                  ]}
+                  placeholder={`Option ${optIndex + 1}`}
+                  placeholderTextColor="#94A3B8"
+                  value={opt}
+                  onChangeText={(text) => updateOption(sIndex, qIndex, optIndex, text)}
+                />
+                {q.options?.length > 2 && (
+                  <TouchableOpacity
+                    style={qStyles.removeOption}
+                    onPress={() => removeOption(sIndex, qIndex, optIndex)}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#CBD5E1" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          })}
+          {!!(qErrors?.optionsMissing || []).length && (
+            <Text style={styles.errorText}>
+              Fournissez au moins deux options non vides.
+            </Text>
+          )}
+          {!!qErrors?.answerMissing && (
+            <Text style={styles.errorText}>
+              Sélectionnez la réponse correcte.
+            </Text>
+          )}
           <TouchableOpacity
             style={qStyles.addOptionBtn}
             onPress={() => addOption(sIndex, qIndex)}
@@ -729,6 +840,16 @@ const styles = StyleSheet.create({
     color: TEXT,
     borderWidth: 1,
     borderColor: BORDER,
+  },
+  inputError: {
+    borderColor: DANGER,
+  },
+  errorText: {
+    color: DANGER,
+    marginTop: 6,
+    marginBottom: 4,
+    fontSize: 12.5,
+    fontWeight: "600",
   },
   scrollView: { flex: 1 },
   scrollContent: { padding: 20 },
@@ -890,7 +1011,7 @@ const qStyles = StyleSheet.create({
     color: TEXT,
     borderWidth: 1,
     borderColor: BORDER,
-    marginBottom: 16,
+    marginBottom: 8,
     minHeight: 44,
   },
   typeSection: { marginBottom: 16 },
