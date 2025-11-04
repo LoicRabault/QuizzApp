@@ -4,13 +4,13 @@ import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { Alert, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { auth, db } from "../../services/firebase";
+import { Ionicons } from "@expo/vector-icons"; 
 
 export default function AdminHomeScreen() {
   const router = useRouter();
   const [recentQuizzes, setRecentQuizzes] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Déconnexion sécurisée
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -21,7 +21,6 @@ export default function AdminHomeScreen() {
     }
   };
 
-  // ✅ Récupération des 5 derniers quiz
   useEffect(() => {
     const fetchQuizzes = async () => {
       try {
@@ -40,8 +39,17 @@ export default function AdminHomeScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ alignItems: "center" }}>
-      <Text style={styles.title}>Tableau de bord Administrateur</Text>
-      <Text style={styles.subtitle}>Bienvenue 👋 Gérez vos quiz, vos résultats et vos participants ici.</Text>
+      {/* === HEADER avec bouton déconnexion === */}
+      <View style={styles.header}>
+        <Text style={styles.title}>Tableau de bord Administrateur</Text>
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={22} color="#EF4444" />
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.subtitle}>
+        Bienvenue 👋 Gérez vos quiz, vos résultats et vos participants ici.
+      </Text>
 
       {/* === Boutons d’action === */}
       <View style={styles.actions}>
@@ -80,7 +88,9 @@ export default function AdminHomeScreen() {
               >
                 <View>
                   <Text style={styles.quizTitle}>{item.title}</Text>
-                  <Text style={styles.quizMeta}>{item.theme} • {new Date(item.createdAt?.toDate?.() || item.createdAt).toLocaleDateString()}</Text>
+                  <Text style={styles.quizMeta}>
+                    {item.theme} • {new Date(item.createdAt?.toDate?.() || item.createdAt).toLocaleDateString()}
+                  </Text>
                 </View>
                 <Text style={styles.quizArrow}>›</Text>
               </TouchableOpacity>
@@ -90,11 +100,6 @@ export default function AdminHomeScreen() {
           <Text style={styles.infoText}>Aucun quiz récent pour le moment.</Text>
         )}
       </View>
-
-      {/* === Bouton déconnexion === */}
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-        <Text style={styles.logoutText}>🚪 Se déconnecter</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -106,11 +111,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 40,
   },
+  header: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
   title: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "700",
     color: "#1e293b",
-    textAlign: "center",
   },
   subtitle: {
     fontSize: 16,
@@ -118,6 +129,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 8,
     marginBottom: 20,
+  },
+  logoutBtn: {
+    backgroundColor: "#FEE2E2",
+    padding: 8,
+    borderRadius: 8,
   },
   actions: {
     flexDirection: "row",
@@ -198,19 +214,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "#64748b",
     paddingVertical: 8,
-  },
-  logoutBtn: {
-    marginTop: 40,
-    alignSelf: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#ef4444",
-  },
-  logoutText: {
-    color: "#ef4444",
-    fontWeight: "600",
-    fontSize: 15,
   },
 });
